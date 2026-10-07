@@ -1,0 +1,939 @@
+/* ===================== 3D BACKGROUND CANVAS ===================== */
+.scene-canvas {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+}
+.bg-fade {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(circle at 50% 0%, transparent 0%, var(--bg) 92%);
+}
+
+/* ===================== LOADER ===================== */
+.loader {
+  position: fixed; inset: 0; z-index: 1002;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; overflow: hidden;
+  pointer-events: none;
+}
+.loader-backdrop {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  pointer-events: auto;
+}
+.loader-stage { display: flex; align-items: center; justify-content: center; min-height: 140px; }
+.loader-ready {
+  font-family: "Archivo Black", sans-serif; text-align: center;
+  font-size: clamp(2.2rem, 8vw, 4.5rem); color: var(--text);
+}
+/* KESHRI glows bright white while dropping in — fill stays theme-colored,
+   only the outline/glow is white. */
+.loader-keshri-letter {
+  font-family: "Satoshi", "Space Grotesk", sans-serif; font-weight: 900;
+  color: var(--highlight);
+  text-shadow: 0 0 14px #fff, 0 0 26px rgba(255,255,255,0.7);
+  -webkit-text-stroke: 0.6px #fff;
+}
+
+/* Curtain reveal panels — solid black, split top/bottom to uncover the site. */
+.curtain-half {
+  position: fixed; left: 0; right: 0; height: 51%; background: #050505; z-index: 1000;
+}
+.curtain-top { top: 0; }
+.curtain-bottom { bottom: 0; }
+.loader-hello {
+  font-family: "Playfair Display", serif; font-weight: 900; font-style: italic;
+  text-align: center; line-height: 1;
+  font-size: clamp(3rem, 13vw, 7.5rem); color: var(--highlight);
+  letter-spacing: -0.01em;
+}
+.loader-imkeshri {
+  font-family: "Archivo Black", sans-serif; text-align: center; line-height: 1;
+  font-size: clamp(2rem, 9vw, 5rem); color: var(--text);
+  position: relative;
+}
+/* One-shot nudge during the hold, timed to the 3.3s "name" stage — settles
+   after drop-in (~40%), gives a little "touch me" wiggle mid-hold, then
+   rests again before the shatter. */
+@keyframes keshriInvite {
+  0%, 58% { transform: translate(0, 0) scale(1); }
+  64% { transform: translate(-8px, 3px) scale(1.04); }
+  71% { transform: translate(7px, -3px) scale(0.98); }
+  78% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+.keshri-invite { animation: keshriInvite 3.3s ease-in-out 1; }
+.loader-shatter-spark {
+  position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 10px 2px var(--highlight);
+  pointer-events: none;
+}
+.loader-dots { display: flex; gap: 8px; margin-top: 34px; }
+.loader-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+.loader-dot.active { background: var(--highlight); }
+.loader-skip {
+  position: absolute; bottom: 34px; font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem; color: var(--text-dim); border: 1px solid var(--border);
+  padding: 8px 16px; border-radius: 999px; background: transparent;
+}
+
+/* ===================== NAV ===================== */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; max-width: 1180px; margin: 0 auto; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: "Archivo Black", sans-serif; font-size: 1.05rem; }
+.brand-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--highlight); animation: pulseGlow 2.2s ease-in-out infinite; }
+.nav-links { display: flex; align-items: center; gap: 24px; }
+.nav-links a { font-size: 0.88rem; color: var(--text-dim); transition: color .2s ease; font-weight: 600; }
+.nav-links a:hover { color: var(--highlight); }
+.nav-mobile-hide { display: flex; }
+@media (max-width: 800px) { .nav-mobile-hide { display: none; } }
+.theme-switch { display: flex; gap: 8px; align-items: center; }
+.theme-dot {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border);
+  transition: transform .2s ease, border-color .2s ease; position: relative;
+}
+.theme-dot.active { border-color: var(--text); transform: scale(1.15); }
+
+/* ===================== HERO BANNER ===================== */
+.hero {
+  padding: 152px 0 90px; overflow: hidden;
+}
+.hero-grid {
+  display: grid; grid-template-columns: 1fr 340px; gap: 40px; align-items: start;
+}
+@media (max-width: 880px) { .hero-grid { grid-template-columns: 1fr; } }
+.hero-kicker { font-family: "JetBrains Mono", monospace; color: var(--text-dim); font-size: 0.85rem; margin-bottom: 6px; }
+.hero-title {
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(2.1rem, 8.5vw, 6rem);
+  line-height: 1.02; letter-spacing: -0.02em;
+  text-transform: uppercase;
+  position: relative; display: inline-block;
+}
+.hero-title .hl { color: var(--highlight); }
+/* Same "crazy" skewed treatment as the Keshri Portfolio brand mark —
+   each word forced onto its own line, skewed, never breaking mid-word. */
+.hero-title-word {
+  display: block; white-space: nowrap;
+  transform: skewX(-8deg); transform-origin: left center;
+}
+.hero-title-word.hl {
+  transform: skewX(-8deg) scale(1.03);
+  font-family: "Playfair Display", serif; font-style: italic; font-weight: 900;
+  -webkit-text-stroke: 2px currentColor;
+  paint-order: stroke fill;
+}
+
+/* A soft glowing bar breathing underneath the title — the "outstanding" border light. */
+.hero-title::after {
+  content: ""; position: absolute; left: 2px; right: 10%; bottom: -14px; height: 4px;
+  border-radius: 4px; background: var(--highlight);
+  animation: titleGlowBar 2.6s ease-in-out infinite;
+}
+@keyframes titleGlowBar {
+  0%, 100% { opacity: 0.5; box-shadow: 0 0 12px 1px color-mix(in srgb, var(--highlight) 60%, transparent); }
+  50% { opacity: 1; box-shadow: 0 0 26px 4px color-mix(in srgb, var(--highlight) 85%, transparent); }
+}
+
+/* Idle motion: sits still, gives a small inviting nudge + glow pulse, sits
+   still again — as if asking to be tapped. */
+@keyframes idleTitleShift {
+  0%, 62% { transform: translate(0, 0) scale(1); filter: drop-shadow(0 0 0 transparent); }
+  67% { transform: translate(-6px, 1px) scale(1.015); filter: drop-shadow(0 0 18px color-mix(in srgb, var(--highlight) 45%, transparent)); }
+  72% { transform: translate(5px, -1px) scale(0.995); }
+  77% { transform: translate(-2px, 0) scale(1.01); }
+  82%, 100% { transform: translate(0, 0) scale(1); filter: drop-shadow(0 0 0 transparent); }
+}
+.hero-title { animation: idleTitleShift 4.6s ease-in-out infinite; }
+.tag-loop-frame {
+  margin-top: 26px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 8px;
+}
+.hero-photo-wrap {
+  position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--border);
+  aspect-ratio: 4/5; background: var(--surface);
+}
+.hero-photo-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hero-photo-badge {
+  position: absolute; bottom: 14px; left: 14px; right: 14px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(6px);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+  font-family: "JetBrains Mono", monospace; font-size: 0.75rem; color: var(--text-dim);
+}
+.hero-blurb { margin-top: 34px; max-width: 640px; color: var(--text); opacity: 0.88; font-size: 1.12rem; line-height: 1.68; }
+.hero-cta { display: flex; gap: 16px; margin-top: 32px; flex-wrap: wrap; }
+
+/* ===================== MARQUEE ===================== */
+.marquee-wrap { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 18px 0; overflow: hidden; position: relative; z-index: 2; background: var(--bg-alt); }
+.marquee-track { display: flex; gap: 44px; width: max-content; animation: marquee 24s linear infinite; }
+.marquee-item { font-family: "Archivo Black", sans-serif; font-size: 1.1rem; color: var(--text-dim); white-space: nowrap; display: flex; align-items: center; gap: 14px; text-transform: uppercase; }
+.marquee-item b { color: var(--highlight); }
+
+/* ===================== LOOPING FACTS ===================== */
+.facts-stage {
+  min-height: 260px; display: flex; align-items: center; justify-content: center;
+  text-align: center; position: relative;
+}
+.facts-word {
+  position: absolute; font-weight: 800; letter-spacing: -0.01em; padding: 0 20px;
+}
+.facts-word.xl { font-family: "Archivo Black", sans-serif; font-size: clamp(2.4rem, 7vw, 5rem); color: var(--text); }
+.facts-word.hl { font-family: "Archivo Black", sans-serif; font-size: clamp(2rem, 5.5vw, 3.8rem); color: var(--highlight); }
+.facts-word.sm { font-family: "Space Grotesk", sans-serif; font-size: clamp(1.3rem, 3vw, 1.9rem); color: var(--text); font-weight: 500; }
+
+/* ===================== SKILLS ===================== */
+.skills-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.skill-chip {
+  padding: 12px 20px; border: 1px solid var(--border); border-radius: 999px;
+  font-family: "JetBrains Mono", monospace; font-size: 0.85rem; background: var(--surface);
+  transition: border-color .2s ease, color .2s ease;
+}
+.skill-chip:hover { border-color: var(--highlight); color: var(--highlight); }
+
+/* ===================== PROJECTS ===================== */
+.projects-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; perspective: 1200px; }
+@media (max-width: 900px) { .projects-grid { grid-template-columns: 1fr; } }
+.project-card {
+  padding: 28px; transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+  position: relative;
+}
+.project-card:hover {
+  border-color: var(--highlight);
+  box-shadow: 0 24px 60px -24px color-mix(in srgb, var(--highlight) 55%, transparent);
+}
+.project-tag { font-family: "JetBrains Mono", monospace; font-size: 0.75rem; color: var(--highlight); text-transform: uppercase; letter-spacing: 0.08em; }
+.project-card h3 {
+  font-family: "Playfair Display", serif; font-weight: 900; font-style: italic;
+  font-size: 1.5rem; margin: 10px 0 12px; letter-spacing: -0.01em;
+}
+.project-card p { color: var(--text-dim); font-size: 0.92rem; line-height: 1.55; margin-bottom: 16px; }
+.project-stack { display: flex; flex-wrap: wrap; gap: 8px; }
+.project-stack span { font-family: "JetBrains Mono", monospace; font-size: 0.72rem; color: var(--text-dim); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px; }
+
+/* ===================== CONTACT ===================== */
+.contact-panel {
+  display: grid; grid-template-columns: 1fr 1fr; overflow: hidden;
+}
+@media (max-width: 780px) { .contact-panel { grid-template-columns: 1fr; } }
+.contact-left { padding: 44px; border-right: 1px solid var(--border); }
+@media (max-width: 780px) { .contact-left { border-right: none; border-bottom: 1px solid var(--border); } }
+.contact-left h3 { font-family: "Archivo Black", sans-serif; font-size: 2rem; margin-bottom: 14px; }
+.contact-left > p { color: var(--text-dim); line-height: 1.6; margin-bottom: 30px; }
+.contact-links { display: flex; flex-direction: column; gap: 18px; }
+.contact-link-row { display: flex; align-items: center; gap: 14px; }
+.contact-link-row .c-icon {
+  width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--highlight); flex-shrink: 0;
+}
+.contact-link-row div span { display: block; color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.contact-link-row div a, .contact-link-row div p { font-weight: 600; font-size: 0.95rem; word-break: break-word; }
+.contact-right { padding: 44px; display: flex; flex-direction: column; gap: 16px; }
+.contact-right label { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 6px; display: block; }
+.contact-right input, .contact-right textarea {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; color: var(--text); font-family: inherit; font-size: 0.92rem;
+}
+.contact-right input:focus, .contact-right textarea:focus { outline: none; border-color: var(--highlight); }
+.contact-right textarea { min-height: 100px; resize: vertical; }
+
+/* ===================== FOOTER ===================== */
+.footer { border-top: 1px solid var(--border); padding: 60px 0 36px; text-align: center; position: relative; z-index: 2; }
+.footer-big { font-family: "Archivo Black", sans-serif; font-size: clamp(2.2rem, 8vw, 4.5rem); text-transform: uppercase; color: var(--text); opacity: 0.9; }
+.footer-big .hl { color: var(--highlight); }
+.footer p.credit { color: var(--text-dim); font-size: 0.85rem; font-family: "JetBrains Mono", monospace; margin-top: 24px; }
+.footer-social { display: flex; gap: 16px; justify-content: center; margin-top: 20px; }
+.footer-social a {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center; transition: border-color .2s ease, color .2s ease;
+  color: var(--text-dim);
+}
+.footer-social a:hover { border-color: var(--highlight); color: var(--highlight); }
+
+/* ===================== RESUME BUTTON (3D style) ===================== */
+.btn-resume {
+  position: relative; display: inline-flex; align-items: center; gap: 10px;
+  padding: 16px 30px; border-radius: 14px; font-weight: 800; font-size: 0.98rem;
+  color: #fff; border: none;
+  background: linear-gradient(180deg, #b968f0 0%, #7c2ee8 100%);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.45) inset,
+    0 -4px 0 rgba(0,0,0,0.18) inset,
+    0 14px 26px -8px rgba(124, 46, 232, 0.65);
+  transform: translateY(0);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.btn-resume:hover { transform: translateY(-3px); box-shadow: 0 1px 0 rgba(255,255,255,0.45) inset, 0 -4px 0 rgba(0,0,0,0.18) inset, 0 20px 34px -10px rgba(124, 46, 232, 0.75); }
+.btn-resume:active { transform: translateY(1px); }
+
+/* Idle nudge — same "wants to be tapped" rhythm as the hero title: a
+   little movement, a pause, a little movement, a pause. */
+@keyframes resumeInvite {
+  0%, 58% { transform: translateY(0) scale(1); box-shadow: 0 1px 0 rgba(255,255,255,0.45) inset, 0 -4px 0 rgba(0,0,0,0.18) inset, 0 14px 26px -8px rgba(124, 46, 232, 0.65); }
+  63% { transform: translateY(-6px) scale(1.04); box-shadow: 0 1px 0 rgba(255,255,255,0.45) inset, 0 -4px 0 rgba(0,0,0,0.18) inset, 0 22px 40px -8px rgba(124, 46, 232, 0.9); }
+  68% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(0) scale(1); box-shadow: 0 1px 0 rgba(255,255,255,0.45) inset, 0 -4px 0 rgba(0,0,0,0.18) inset, 0 14px 26px -8px rgba(124, 46, 232, 0.65); }
+}
+.btn-resume { animation: resumeInvite 4s ease-in-out infinite; }
+.btn-resume:hover { animation-play-state: paused; }
+
+/* ===================== FLOATING QUICK-NAV (top right) ===================== */
+.quicknav { position: fixed; top: 18px; right: 20px; z-index: 200; }
+.quicknav-toggle {
+  width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); display: flex; align-items: center; justify-content: center;
+  color: var(--text); position: relative; z-index: 2; transition: border-color .2s ease, color .2s ease;
+}
+.quicknav-toggle:hover { border-color: var(--highlight); color: var(--highlight); }
+.quicknav-menu {
+  position: absolute; top: 56px; right: 0; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 14px; padding: 10px;
+  display: flex; flex-direction: column; gap: 4px; min-width: 170px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+}
+.quicknav-menu a {
+  padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; font-weight: 600;
+  color: var(--text-dim); display: flex; align-items: center; gap: 10px;
+  transition: background .2s ease, color .2s ease;
+}
+.quicknav-menu a:hover { background: var(--surface-2); color: var(--highlight); }
+
+/* ===================== PHOTO BORDER (theme-color, rotates with the card) ===================== */
+.photo-ring {
+  position: relative; width: 100%; aspect-ratio: 4/5; border-radius: 22px;
+  padding: 3px; isolation: isolate;
+  perspective: 1400px; transform-style: preserve-3d;
+}
+@keyframes borderBreathe {
+  0%, 100% { opacity: 0.7; box-shadow: 0 0 26px 2px color-mix(in srgb, var(--highlight) 55%, transparent); }
+  50% { opacity: 1; box-shadow: 0 0 42px 6px color-mix(in srgb, var(--highlight) 75%, transparent); }
+}
+/* A single bright theme-colored border that gently breathes, and rotates
+   together with the photo as one rigid card — not a separate static ring. */
+.photo-ring::before {
+  content: ""; position: absolute; inset: 0; border-radius: 22px;
+  border: 2px solid var(--highlight);
+  animation: borderBreathe 3.2s ease-in-out infinite;
+}
+.photo-ring-inner {
+  position: relative; width: 100%; height: 100%; border-radius: 19px; overflow: hidden;
+  background: var(--surface); border: 3px solid var(--bg);
+}
+.photo-flip-space { transform-style: preserve-3d; }
+.photo-face {
+  position: absolute; inset: 0; backface-visibility: hidden; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.photo-face-front img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.photo-face-back {
+  transform: rotateY(180deg);
+  background: var(--surface); align-items: center; justify-content: center;
+  padding: 22px; gap: 14px; text-align: center;
+}
+.photo-back-handle {
+  font-family: "Archivo Black", sans-serif; font-size: clamp(1.3rem, 4vw, 1.8rem);
+  color: var(--highlight); text-shadow: 0 0 20px var(--highlight), 0 0 40px var(--highlight);
+}
+.identity-card-compact { margin-top: 0; border: none; background: transparent; padding: 0; min-height: auto; }
+/* Border brightens noticeably while the photo is actively being dragged. */
+.photo-ring-active::before {
+  animation: none;
+  opacity: 1;
+  border-width: 3px;
+  box-shadow: 0 0 55px 10px color-mix(in srgb, var(--highlight) 90%, transparent);
+}
+.photo-face-front .hero-photo-badge { z-index: 3; }
+
+
+/* ===================== EDUCATION / CERTIFICATIONS ===================== */
+.edu-list { display: flex; flex-direction: column; gap: 16px; }
+.edu-card {
+  display: flex; gap: 18px; padding: 24px; align-items: flex-start;
+}
+.edu-icon {
+  width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--highlight); border: 1px solid var(--border);
+}
+/* Each section keeps its own fixed accent color, independent of the chosen
+   theme, so the page reads with real visual variety section to section. */
+#education .edu-icon { color: #ff4d5e; border-color: rgba(255,77,94,0.35); }
+#certifications .edu-icon { color: #ff9d2e; border-color: rgba(255,157,46,0.35); }
+#skills .edu-icon { color: #5b8cff; border-color: rgba(91,140,255,0.35); }
+.edu-card h4 { font-family: "Archivo Black", sans-serif; font-size: 1.05rem; margin-bottom: 4px; }
+.edu-card .edu-place { color: var(--text-dim); font-size: 0.82rem; margin-bottom: 8px; }
+.edu-card .edu-degree { font-size: 0.92rem; color: var(--text); margin-bottom: 6px; }
+.edu-card .edu-period { font-family: "JetBrains Mono", monospace; font-size: 0.75rem; color: var(--highlight); }
+
+.cert-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+@media (max-width: 800px) { .cert-grid { grid-template-columns: 1fr; } }
+.cert-card { padding: 18px; display: flex; gap: 12px; align-items: center; }
+.cert-card .edu-icon { width: 38px; height: 38px; }
+.cert-card h5 { font-size: 0.92rem; font-weight: 700; margin-bottom: 2px; }
+.cert-card p { font-size: 0.78rem; color: var(--text-dim); }
+
+/* ===================== SKILLS with icons ===================== */
+/* Coverflow — curved arc, auto-scrolls, draggable, center card highlighted. */
+.coverflow {
+  display: flex; gap: 20px; overflow-x: auto; padding: 30px 30vw 30px;
+  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+  perspective: 1400px;
+}
+.coverflow::-webkit-scrollbar { height: 8px; }
+.coverflow-item {
+  flex: 0 0 auto; width: min(78vw, 320px); scroll-snap-align: center;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+  transform-style: preserve-3d;
+}
+.coverflow-item .card { height: 100%; transition: border-color 0.3s ease, box-shadow 0.3s ease; }
+.coverflow-active .card {
+  border-color: var(--highlight);
+  box-shadow: 0 0 0 1px var(--highlight), 0 26px 60px -20px color-mix(in srgb, var(--highlight) 60%, transparent);
+}
+.skill-scroll-hint {
+  text-align: center; font-family: "JetBrains Mono", monospace; font-size: 0.78rem;
+  color: var(--text-dim); margin-top: 4px;
+}
+.skill-group-card { padding: 30px 26px; height: 100%; }
+.skill-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.skill-group-head .edu-icon { width: 38px; height: 38px; }
+.skill-group-head h4 { font-family: "Archivo Black", sans-serif; font-size: 0.95rem; }
+.skill-group-card .skill-chip { font-size: 0.76rem; padding: 8px 14px; margin: 3px; display: inline-block; }
+
+/* ===================== NAV LEFT / THEME ICON / BRAND ===================== */
+.nav-left { display: flex; align-items: center; gap: 16px; }
+.theme-icon-wrap { position: relative; }
+.theme-icon-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); display: flex; align-items: center; justify-content: center;
+  transition: border-color .2s ease, color .2s ease;
+}
+.theme-icon-btn:hover { border-color: var(--highlight); color: var(--highlight); }
+.theme-picker-pop {
+  position: absolute; top: 50px; left: 0; display: flex; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+  padding: 10px 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+}
+.theme-dot {
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border);
+  transition: transform .2s ease, border-color .2s ease; cursor: pointer;
+}
+.theme-dot.active { border-color: var(--text); transform: scale(1.2); }
+
+.brand-crazy {
+  font-family: "Archivo Black", sans-serif; font-size: 1.15rem; line-height: 1;
+  display: flex; flex-direction: column; letter-spacing: -0.01em;
+}
+.brand-crazy-a {
+  transform: skewX(-8deg); color: var(--text); text-transform: uppercase; font-size: 0.7em;
+  letter-spacing: 0.06em; opacity: 0.75;
+}
+.brand-crazy-b {
+  transform: skewX(-8deg) scale(1.05); color: var(--highlight); text-transform: uppercase;
+  margin-top: -2px;
+}
+
+/* ===================== TILT CARD (mouse hover) ===================== */
+.edu-card, .cert-card, .skill-group-card, .project-card {
+  transition: border-color .3s ease, box-shadow .3s ease;
+  will-change: transform;
+}
+.edu-card:hover, .cert-card:hover, .skill-group-card:hover, .project-card:hover {
+  border-color: var(--highlight);
+  box-shadow: 0 20px 50px -20px color-mix(in srgb, var(--highlight) 40%, transparent);
+}
+
+/* ===================== IMPORTANCE LOOP (About me) ===================== */
+/* Fixed height so the type/erase cycle never shifts the page below it.
+   Left-aligned so every phrase starts from the same fixed point instead
+   of re-centering (and drifting) based on how long the text is. */
+.importance-loop-stage {
+  height: clamp(180px, 34vw, 260px); display: flex; align-items: center; justify-content: flex-start;
+  text-align: left; padding: 20px;
+}
+.importance-line {
+  font-family: "Space Grotesk", sans-serif; line-height: 1.25; max-width: 780px;
+}
+.importance-lead {
+  color: var(--text); -webkit-text-stroke: 0.4px var(--border);
+  font-size: clamp(1.3rem, 3vw, 1.7rem); font-weight: 500;
+}
+.importance-highlight {
+  font-family: "Archivo Black", sans-serif; font-weight: 800;
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+}
+.importance-highlight.tone-black { color: var(--text); -webkit-text-stroke: 0.6px var(--border); }
+.importance-highlight.tone-red { color: #ff4d5e; text-shadow: 0 0 26px rgba(255, 77, 94, 0.4); }
+.importance-highlight.tone-orange { color: #ff9d2e; text-shadow: 0 0 30px rgba(255, 157, 46, 0.45); }
+.importance-highlight.tone-blue { color: #5b8cff; text-shadow: 0 0 26px rgba(91, 140, 255, 0.4); }
+.importance-line .seq-cursor {
+  display: inline-block; width: 4px; height: 0.9em; background: currentColor;
+  margin-left: 4px; vertical-align: middle; animation: blink 0.9s step-start infinite;
+}
+
+/* ===================== CONTACT (direct contact + message form) ===================== */
+.contact-head { max-width: 620px; margin: 0 auto 50px; text-align: center; }
+.contact-eyebrow {
+  font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 0.18em;
+  font-size: 12.5px; color: var(--highlight); display: block; margin-bottom: 14px;
+}
+.contact-heading {
+  font-family: "Playfair Display", serif; font-weight: 900; font-style: italic;
+  font-size: clamp(2rem, 5.5vw, 2.9rem); line-height: 1.25; color: var(--text);
+}
+.contact-heading-accent { position: relative; display: inline-block; }
+.contact-heading-accent::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px;
+  background: var(--highlight); opacity: 0.7;
+}
+.contact-sub { margin-top: 18px; color: var(--text-dim); font-size: 0.98rem; line-height: 1.6; }
+
+.contact-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+@media (max-width: 820px) { .contact-columns { grid-template-columns: 1fr; } }
+
+.contact-col-label {
+  display: block; font-family: "JetBrains Mono", monospace; text-transform: uppercase;
+  letter-spacing: 0.14em; font-size: 0.75rem; color: var(--highlight); margin-bottom: 16px;
+}
+
+.direct-contact { display: flex; flex-direction: column; }
+.direct-contact-row {
+  display: flex; align-items: center; gap: 14px; padding: 16px 18px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 12px; transition: border-color .2s ease;
+}
+.direct-contact-row:hover { border-color: var(--highlight); }
+.dc-icon {
+  width: 42px; height: 42px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+}
+.brand-email .dc-icon { background: #ea4335; }
+.brand-linkedin .dc-icon { background: #0a66c2; }
+.brand-github .dc-icon { background: #24292e; }
+.brand-instagram .dc-icon { background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af); }
+.brand-x .dc-icon { background: #000000; border: 1px solid #333; }
+.brand-phone .dc-icon { background: #25b566; }
+.dc-label-only { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+
+.send-message { display: flex; flex-direction: column; }
+.send-message label {
+  font-family: "JetBrains Mono", monospace; font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-dim); margin: 12px 0 6px;
+}
+.send-message input, .send-message textarea {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; color: var(--text); font-family: inherit; font-size: 0.92rem;
+}
+.send-message input:focus, .send-message textarea:focus { outline: none; border-color: var(--highlight); }
+.send-message textarea { min-height: 100px; resize: vertical; }
+.btn-send {
+  margin-top: 22px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95rem;
+  background: var(--highlight); color: #fff; transition: transform .2s ease, box-shadow .2s ease;
+}
+.btn-send:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -10px color-mix(in srgb, var(--highlight) 60%, transparent); }
+
+/* ===================== MAGNETIC BUTTON HOVER ===================== */
+.btn-primary, .btn-resume { transition: transform .2s ease, box-shadow .2s ease; }
+
+/* ===================== AESTHETIC CURSOR (desktop only) ===================== */
+.cursor-dot {
+  position: fixed; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--highlight); pointer-events: none; z-index: 999;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px 1px var(--highlight);
+}
+.cursor-ring {
+  position: fixed; top: 0; left: 0; width: 34px; height: 34px; border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--highlight) 70%, transparent);
+  pointer-events: none; z-index: 999;
+  transform: translate(-50%, -50%);
+}
+@media (pointer: coarse) { .cursor-dot, .cursor-ring { display: none; } }
+
+/* ===================== BACKGROUND PICKER (right side, below quicknav) ===================== */
+
+/* ===================== LIQUID GOLD BACKGROUND ===================== */
+.bg-liquid-gold { position: absolute; inset: 0; background: #07070a; overflow: hidden; perspective: 900px; }
+.lg-blob {
+  position: absolute; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #e8c37a, #8a6a1f 55%, #100c02 100%);
+  filter: blur(2px); opacity: 0.55; mix-blend-mode: screen;
+  animation: lgMorph 16s ease-in-out infinite, lgDrift 22s ease-in-out infinite;
+}
+.lg-blob-1 { width: 480px; height: 420px; top: -8%; left: -6%; animation-duration: 18s, 24s; }
+.lg-blob-2 { width: 360px; height: 380px; top: 30%; right: -10%; animation-duration: 20s, 26s; animation-delay: -4s, -2s; }
+.lg-blob-3 { width: 420px; height: 340px; bottom: -12%; left: 20%; animation-duration: 22s, 20s; animation-delay: -8s, -6s; }
+.lg-blob-4 { width: 300px; height: 300px; bottom: 10%; right: 15%; animation-duration: 16s, 28s; animation-delay: -2s, -10s; }
+@keyframes lgMorph {
+  0%, 100% { border-radius: 42% 58% 65% 35% / 45% 40% 60% 55%; }
+  33% { border-radius: 65% 35% 40% 60% / 55% 65% 35% 45%; }
+  66% { border-radius: 50% 50% 30% 70% / 60% 40% 60% 40%; }
+}
+@keyframes lgDrift {
+  0%, 100% { transform: translate(0, 0) rotateZ(0deg) rotateX(0deg); }
+  50% { transform: translate(40px, -30px) rotateZ(20deg) rotateX(15deg); }
+}
+
+/* ===================== FLOW WAVE BACKGROUND ===================== */
+.bg-flow-wave { position: absolute; inset: 0; background: #06060a; overflow: hidden; }
+.fw-svg { width: 100%; height: 100%; }
+.fw-path { opacity: 0.55; animation: fwFlow 14s ease-in-out infinite; }
+.fw-path-2 { animation-duration: 18s; animation-delay: -4s; opacity: 0.4; }
+@keyframes fwFlow {
+  0%, 100% { transform: translateX(0) translateY(0) scaleY(1); }
+  50% { transform: translateX(-40px) translateY(30px) scaleY(1.08); }
+}
+
+/* ===================== LIGHT TRAILS BACKGROUND ===================== */
+.bg-light-trails { position: absolute; inset: 0; background: radial-gradient(circle at 50% 30%, #140a2e 0%, #05050a 70%); overflow: hidden; }
+.trail-line {
+  position: absolute; left: -30%; width: 160%; height: 2.5px;
+  filter: blur(1px); opacity: 0.75; border-radius: 999px;
+  animation-name: trailMove; animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+  box-shadow: 0 0 12px currentColor;
+}
+@keyframes trailMove {
+  0% { transform: translateX(-20%) translateY(0) scaleX(0.7); opacity: 0; }
+  15% { opacity: 0.8; }
+  50% { transform: translateX(10%) translateY(-18px) scaleX(1); }
+  85% { opacity: 0.8; }
+  100% { transform: translateX(30%) translateY(10px) scaleX(0.7); opacity: 0; }
+}
+
+/* ===================== SEQUENTIAL LOOP (hero tags) ===================== */
+/* Fixed height (not min-height) so switching between normal/big text never
+   shifts the rest of the page up or down. */
+.seq-loop-stage {
+  height: 90px; display: flex; align-items: center; justify-content: center;
+  text-align: center; position: relative; padding: 10px;
+}
+.seq-normal {
+  font-family: "Space Grotesk", sans-serif; font-weight: 500;
+  font-size: clamp(1.1rem, 2.6vw, 1.5rem); color: var(--text);
+}
+.seq-big {
+  font-family: "Archivo Black", sans-serif; font-weight: 800;
+  font-size: clamp(1.8rem, 5vw, 3.4rem); color: var(--highlight);
+}
+.seq-cursor {
+  display: inline-block; width: 3px; height: 0.95em; background: currentColor;
+  margin-left: 3px; vertical-align: middle; animation: blink 0.9s step-start infinite;
+}
+.seq-loop-tags { height: 70px; margin-top: 18px; }
+.seq-loop-tags .seq-normal { font-size: clamp(0.95rem, 2vw, 1.15rem); }
+.seq-loop-tags .seq-big { font-size: clamp(1.4rem, 3.4vw, 2rem); }
+
+/* ===================== MIRROR REFLECTION (hero photo + contact icons) ===================== */
+.mirror-reflect {
+  -webkit-box-reflect: below 6px linear-gradient(transparent, transparent 60%, rgba(255,255,255,0.06));
+}
+
+/* ===================== SECTION BORDER LIGHT SWEEP (education only) ===================== */
+.edu-card { position: relative; overflow: hidden; }
+.edu-card::before {
+  content: ""; position: absolute; top: 0; left: -40%; width: 40%; height: 2px;
+  background: linear-gradient(90deg, transparent, #ff4d5e, transparent);
+  animation: borderSweep 4s linear infinite;
+}
+@keyframes borderSweep {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* ===================== MIRROR SHINE SWEEP (skills, on hover) ===================== */
+.skill-group-card { position: relative; overflow: hidden; }
+.skill-group-card::after {
+  content: ""; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
+  background: linear-gradient(115deg, transparent, rgba(91,140,255,0.22), transparent);
+  transform: skewX(-18deg); transition: left 0.65s ease;
+  pointer-events: none;
+}
+.skill-group-card:hover::after { left: 130%; }
+
+/* ===================== PULSE GLOW (certifications) ===================== */
+@keyframes certPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 157, 46, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 157, 46, 0); }
+}
+.cert-card { animation: certPulse 2.6s ease-in-out infinite; }
+.cert-card:hover { animation-play-state: paused; border-color: #ff9d2e; }
+
+/* ===================== SCROLL PROGRESS ===================== */
+.scroll-progress {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 300;
+  background: var(--highlight); transform-origin: 0% 50%; transform: scaleX(0);
+  box-shadow: 0 0 10px var(--highlight);
+}
+
+/* ===================== GRAIN TEXTURE OVERLAY ===================== */
+.grain-overlay {
+  position: fixed; inset: 0; z-index: 4; pointer-events: none; opacity: 0.04; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ===================== SECTION NUMBER LABEL ===================== */
+.section-num {
+  display: block; font-family: "JetBrains Mono", monospace; font-size: 0.75rem;
+  color: var(--text-dim); letter-spacing: 0.1em; margin-bottom: 8px;
+}
+.section-num::before { content: "／ "; color: var(--highlight); }
+
+/* ===================== SHATTER TITLE (tap to replay) ===================== */
+.shatter-trigger { cursor: pointer; display: inline-block; user-select: none; }
+.shatter-hint {
+  font-family: "JetBrains Mono", monospace; font-size: 0.72rem; color: var(--text-dim);
+  margin-top: 8px; opacity: 0.7;
+}
+
+/* ===================== PHOTO TAP-TO-SPIN ===================== */
+.photo-ring-inner { perspective: 900px; }
+.photo-ring-inner img { backface-visibility: hidden; }
+
+/* ===================== IDENTITY LOOP CARD (below photo) ===================== */
+.identity-card {
+  margin-top: 18px; padding: 20px 22px; border-radius: 14px;
+  background-color: var(--surface);
+  background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 14px 14px;
+  border: 1px solid var(--border);
+  min-height: 118px;
+}
+.identity-eyebrow {
+  display: block; font-family: "JetBrains Mono", monospace; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--highlight); margin-bottom: 8px;
+}
+.identity-text { font-size: 1.1rem; line-height: 1.6; }
+.identity-bold { color: var(--text); font-weight: 700; font-family: "Playfair Display", serif; font-style: italic; }
+.identity-normal { color: var(--text-dim); font-weight: 400; }
+
+/* ===================== SITE-WIDE TRAVELING BORDER LIGHT ===================== */
+/* A short, bright comet of light that continuously travels around the
+   entire page's perimeter — not a static glow, an actual moving line. */
+@property --frame-angle {
+  syntax: '<angle>'; initial-value: 0deg; inherits: false;
+}
+.page-frame {
+  position: fixed; inset: 6px; z-index: 998; pointer-events: none;
+  border-radius: 18px; padding: 2px; isolation: isolate;
+}
+.page-frame::before {
+  content: ""; position: absolute; inset: 0; border-radius: 18px;
+  background: conic-gradient(
+    from var(--frame-angle, 0deg),
+    transparent 0%,
+    var(--highlight) 3%,
+    #fff 5%,
+    #ffe98a 6%,
+    #fff 7%,
+    var(--highlight) 9%,
+    transparent 17%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: frameAngleSpin 4.5s linear infinite;
+  filter: drop-shadow(0 0 8px var(--highlight)) drop-shadow(0 0 16px var(--highlight)) drop-shadow(0 0 4px #fff);
+}
+@keyframes frameAngleSpin {
+  to { --frame-angle: 360deg; }
+}
+
+/* ===================== TOPIC HOVER (theme color, auto-reverts) ===================== */
+.project-card h3, .edu-card h4, .skill-group-head h4, .cert-card h5 {
+  transition: color 0.2s ease;
+}
+.project-card:hover h3, .edu-card:hover h4, .skill-group-head:hover h4, .cert-card:hover h5 {
+  color: var(--highlight);
+}
+
+/* ===================== SIDE BORDER LIGHTS (subtle, always visible) ===================== */
+.side-border-light {
+  position: fixed; top: 0; bottom: 0; width: 2px; z-index: 997; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, var(--highlight) 20%, var(--highlight) 80%, transparent 100%);
+  animation: sideBorderPulse 3.2s ease-in-out infinite;
+}
+.side-border-light.left { left: 0; }
+.side-border-light.right { right: 0; }
+@keyframes sideBorderPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.75; }
+}
+
+/* ===================== LINE REVEAL (loading sweep, then split) ===================== */
+.line-stage {
+  position: fixed; inset: 0; z-index: 1000; overflow: hidden;
+  background: #000;
+}
+
+.line-panel {
+  position: fixed; left: 0; right: 0; height: 50%; background: #000;
+  z-index: 2; overflow: visible;
+}
+.line-panel-top { top: 0; }
+.line-panel-bottom { bottom: 0; }
+
+/* The only line that ever exists — a bright core with a wide soft glow
+   fading into the panel above/below it, matching the reference. Sweeps in
+   left to right via scaleX, then travels with its panel during the split. */
+.line-panel-edge {
+  position: absolute; left: 0; right: 0; height: 3px;
+  background: #fff;
+  box-shadow:
+    0 0 10px 2px #fff,
+    0 0 40px 20px color-mix(in srgb, var(--highlight) 70%, transparent),
+    0 0 100px 60px color-mix(in srgb, var(--highlight) 35%, transparent);
+}
+.line-panel-top .line-panel-edge { bottom: 0; }
+.line-panel-bottom .line-panel-edge { top: 0; }
+
+/* ===================== NEON SIGN (under the photo) ===================== */
+.neon-wall {
+  position: relative; margin-top: 18px; border-radius: 14px; overflow: hidden;
+  padding: 26px 16px;
+  background:
+    radial-gradient(circle at 25% 12%, rgba(255,255,255,0.05), transparent 55%),
+    linear-gradient(155deg, #262626 0%, #171717 48%, #0d0d0d 100%);
+  border: 1px solid #2a2a2a;
+  box-shadow: inset 0 0 90px rgba(0,0,0,0.7);
+}
+/* concrete grain */
+.neon-wall-texture {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0.55;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.18) 0px, transparent 1px, transparent 5px);
+}
+.neon-svg {
+  position: relative; display: block; width: 100%; height: auto; overflow: visible;
+  /* bloom: tight bright halo + wide atmospheric spill onto the wall */
+  filter:
+    drop-shadow(0 0 2px var(--neon))
+    drop-shadow(0 0 7px var(--neon))
+    drop-shadow(0 0 18px var(--neon))
+    drop-shadow(0 0 38px color-mix(in srgb, var(--neon) 70%, transparent));
+  animation: neonFlicker 5s infinite;
+}
+.neon-core { opacity: 0.75; }
+@keyframes neonFlicker {
+  0%, 92%, 100% { opacity: 1; }
+  93% { opacity: 0.93; }
+  94% { opacity: 1; }
+  96% { opacity: 0.96; }
+}
+
+
+/* ===================== TAP-TO-POP (certifications + skill chips) ===================== */
+.cert-slot {
+  position: relative; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: scale .45s cubic-bezier(.2, 1.45, .3, 1), translate .45s cubic-bezier(.2, 1.45, .3, 1);
+}
+.cert-slot:hover { scale: 1.03; }
+.cert-slot.is-active { z-index: 40; scale: 1.24; }
+.cert-slot .cert-card { transition: border-color .3s ease, box-shadow .4s ease, background .4s ease; }
+.cert-slot.is-active .cert-card {
+  animation: none; border-color: var(--highlight);
+  background: linear-gradient(135deg, var(--surface-2), var(--surface));
+  box-shadow: 0 0 0 1px var(--highlight), 0 30px 70px -10px rgba(0, 0, 0, .75),
+    0 0 48px color-mix(in srgb, var(--highlight) 55%, transparent);
+}
+.cert-slot.is-active .cert-card h5 { color: var(--highlight); }
+.cert-slot.is-active .cert-card .edu-icon { box-shadow: 0 0 22px color-mix(in srgb, var(--highlight) 70%, transparent); }
+.cert-slot.is-active .cert-card::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .16) 48%, transparent 66%);
+  background-size: 250% 100%; animation: popShine 1.4s ease-out 1;
+}
+.cert-slot .cert-card { position: relative; overflow: hidden; }
+@keyframes popShine { from { background-position: 130% 0; } to { background-position: -40% 0; } }
+@media (max-width: 800px) { .cert-slot.is-active { scale: 1.1; } }
+
+.skill-group-card .skill-chip {
+  position: relative; cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none;
+  transition: scale .4s cubic-bezier(.2, 1.6, .3, 1), rotate .4s ease, background .3s ease,
+    color .3s ease, border-color .3s ease, box-shadow .4s ease;
+}
+.skill-group-card .skill-chip:hover { scale: 1.1; }
+.skill-group-card .skill-chip.is-open {
+  z-index: 30; scale: 1.6; rotate: -2deg; color: #fff; border-color: #fff;
+  background: linear-gradient(135deg, var(--highlight), color-mix(in srgb, var(--highlight) 45%, #1c1e26));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .35), 0 16px 40px rgba(0, 0, 0, .6),
+    0 0 34px color-mix(in srgb, var(--highlight) 75%, transparent);
+}
+.skill-group-card.has-open { overflow: visible; z-index: 5; }
+.skill-group-card.has-open::after { display: none; }
+.coverflow-item:has(.skill-chip.is-open) { z-index: 60; }
+
+
+/* ===================== LOADER SPIDER (silk thread from the top) ===================== */
+.loader-thread {
+  position: fixed; top: 0; left: 0; width: 1.5px; height: 0; z-index: 4; pointer-events: none;
+  translate: -50% 0; transition: opacity 1s ease;
+  background: linear-gradient(to bottom, rgba(232, 193, 112, 0), rgba(232, 193, 112, .9));
+  box-shadow: 0 0 8px rgba(232, 193, 112, .55);
+}
+
+/* ===================== EDUCATION: tap to open a card (refined) ===================== */
+.edu-slot {
+  position: relative; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: scale .5s cubic-bezier(.22, 1, .36, 1), translate .5s cubic-bezier(.22, 1, .36, 1);
+}
+.edu-slot:hover { scale: 1.006; }
+.edu-slot.is-hot { z-index: 50; scale: 1.025; translate: 0 -3px; }
+.edu-slot .edu-card {
+  transition: padding .5s cubic-bezier(.22, 1, .36, 1), margin .5s cubic-bezier(.22, 1, .36, 1),
+    box-shadow .5s ease, border-color .4s ease, background .5s ease;
+}
+.edu-slot .edu-card::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .5s ease;
+  background: radial-gradient(440px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--highlight) 15%, transparent), transparent 62%);
+}
+/* The open card grows gently around its unmoving content and rises above its neighbours. */
+.edu-slot.is-hot .edu-card {
+  padding: 42px 38px; margin: -18px -14px;
+  border-color: color-mix(in srgb, var(--highlight) 55%, var(--border));
+  background: linear-gradient(135deg, var(--surface-2), var(--surface));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .06),
+    0 30px 64px -24px rgba(0, 0, 0, .85),
+    0 12px 54px -20px color-mix(in srgb, var(--highlight) 45%, transparent);
+}
+.edu-slot.is-hot .edu-card::after { opacity: 1; }
+.edu-slot.is-hot .edu-card::before {
+  top: 0; left: 0; width: 3px; height: 100%; transform-origin: top;
+  background: linear-gradient(to bottom, var(--highlight), transparent);
+  animation: eduBar .6s cubic-bezier(.22, 1, .36, 1) 1 forwards;
+}
+@keyframes eduBar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.edu-slot .edu-card h4 { transition: color .35s ease; }
+.edu-slot.is-hot .edu-card h4 { color: var(--highlight); }
+.edu-slot .edu-icon { transition: box-shadow .5s ease, border-color .4s ease; }
+.edu-slot.is-hot .edu-icon {
+  border-color: var(--highlight);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--highlight) 14%, transparent), 0 6px 24px color-mix(in srgb, var(--highlight) 38%, transparent);
+}
+@media (max-width: 700px) {
+  .edu-slot.is-hot .edu-card { padding: 34px 26px; margin: -10px -2px; }
+}
+
+/* ===================== FIT THE SCREEN (laptops, desktops, big monitors) ===================== */
+@media (min-width: 1500px) {
+  html { font-size: 17px; }
+  .container, .nav-inner { max-width: 1320px; }
+  .hero-grid { grid-template-columns: 1fr 400px; gap: 56px; }
+}
+@media (min-width: 1800px) {
+  html { font-size: 19px; }
+  .container, .nav-inner { max-width: 1560px; }
+  .hero-grid { grid-template-columns: 1fr 470px; gap: 72px; }
+}
+@media (min-width: 2300px) {
+  html { font-size: 22px; }
+  .container, .nav-inner { max-width: 1900px; }
+  .hero-grid { grid-template-columns: 1fr 560px; gap: 88px; }
+}
