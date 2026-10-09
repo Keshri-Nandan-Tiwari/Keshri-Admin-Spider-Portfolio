@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { GraduationCap, School } from "lucide-react";
-import { EDUCATION } from "../data/content";
+import { School } from "lucide-react";
+import { useContent } from "../ContentContext";
+import { getIcon } from "../icons";
 import TiltCard from "./TiltCard";
 
-const ICONS = { GraduationCap, School };
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.12 } } };
 // Slides in from the left with a slight rotation settle.
 const item = {
@@ -13,6 +13,7 @@ const item = {
 };
 
 export default function Education() {
+  const { EDUCATION } = useContent();
   const [hot, setHot] = useState(null);
 
   // Tap anywhere outside a card to let it settle.
@@ -41,7 +42,7 @@ export default function Education() {
           viewport={{ once: true, amount: 0.15 }}
         >
           {EDUCATION.map((e) => {
-            const Icon = ICONS[e.icon];
+            const Icon = getIcon(e.icon, School);
             return (
               <motion.div
                 key={e.school}
@@ -70,6 +71,7 @@ export default function Education() {
                     <p className="edu-place">{e.place}</p>
                     <p className="edu-degree">{e.degree}</p>
                     <span className="edu-period">{e.period}</span>
+                    {e.score && <span className="edu-score">{e.score}</span>}
                   </div>
                 </TiltCard>
               </motion.div>

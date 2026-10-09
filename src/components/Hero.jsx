@@ -1,13 +1,15 @@
 import { useState, useRef } from "react";
 import { motion, useMotionValue, useSpring, animate } from "framer-motion";
 import { ArrowRight, MapPin, Download } from "lucide-react";
-import { PROFILE } from "../data/content";
+import { useContent } from "../ContentContext";
 import NeonSign from "./NeonSign";
 import Magnetic from "./Magnetic";
 import ShatterTitle from "./ShatterTitle";
 import IdentityLoop from "./IdentityLoop";
 
 export default function Hero() {
+  const { PROFILE } = useContent();
+  const [roleFirst, ...roleRest] = (PROFILE.role || "Software Developer").split(" ");
   const rotateY = useMotionValue(0);
   const smoothRotateY = useSpring(rotateY, { stiffness: 140, damping: 20 });
   const [isDragging, setIsDragging] = useState(false);
@@ -78,8 +80,8 @@ export default function Hero() {
           >
             <ShatterTitle
               segments={[
-                { text: "Software", className: "hero-title-word font-satoshi" },
-                { text: "Developer", className: "hero-title-word hl" },
+                { text: roleFirst, className: "hero-title-word font-satoshi" },
+                ...(roleRest.length ? [{ text: roleRest.join(" "), className: "hero-title-word hl" }] : []),
               ]}
             />
           </motion.h1>
@@ -125,11 +127,11 @@ export default function Hero() {
           >
             <div className="photo-ring-inner photo-flip-space">
               <div className="photo-face photo-face-front">
-                <img src="/photo.jpg" alt="Keshri Nandan Tiwari" />
+                <img src={PROFILE.photo || "/photo.jpg"} alt={PROFILE.name} />
                 <div className="hero-photo-badge">{PROFILE.name}</div>
               </div>
               <div className="photo-face photo-face-back">
-                <span className="photo-back-handle">@keshri_08__</span>
+                <span className="photo-back-handle">{PROFILE.handle}</span>
                 <IdentityLoop compact />
               </div>
             </div>

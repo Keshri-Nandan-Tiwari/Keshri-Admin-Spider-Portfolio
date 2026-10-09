@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { IDENTITY_LOOP } from "../data/content";
+import { useContent } from "../ContentContext";
 
 export default function IdentityLoop({ compact = false }) {
+  const { IDENTITY_LOOP } = useContent();
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const t = setInterval(() => setIndex((i) => (i + 1) % IDENTITY_LOOP.length), 3600);
+    const t = setInterval(() => setIndex((i) => (i + 1) % Math.max(1, IDENTITY_LOOP.length)), 3600);
     return () => clearInterval(t);
-  }, []);
+  }, [IDENTITY_LOOP.length]);
 
-  const current = IDENTITY_LOOP[index];
+  const current = IDENTITY_LOOP[index % Math.max(1, IDENTITY_LOOP.length)];
+  if (!current) return null;
 
   return (
     <div className={`identity-card ${compact ? "identity-card-compact" : ""}`}>

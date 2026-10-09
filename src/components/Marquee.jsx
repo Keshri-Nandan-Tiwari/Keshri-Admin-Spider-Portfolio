@@ -1,7 +1,9 @@
-const ITEMS = ["Full-Stack Developer", "Java · Spring Boot", "React · Vite", "Open to Work"];
+import { useContent } from "../ContentContext";
 
 export default function Marquee() {
-  const loop = [...ITEMS, ...ITEMS, ...ITEMS];
+  const { MARQUEE } = useContent();
+  if (!MARQUEE.length) return null;
+  const loop = [...MARQUEE, ...MARQUEE, ...MARQUEE];
   return (
     <div className="marquee-wrap">
       <div className="marquee-track">

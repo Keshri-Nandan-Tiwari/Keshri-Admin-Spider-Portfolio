@@ -1,16 +1,19 @@
 import { motion } from "framer-motion";
-import { Mail, Phone, ArrowRight } from "lucide-react";
+import { Mail, Phone, ArrowRight, Link2 } from "lucide-react";
 import { FaLinkedin, FaGithub, FaInstagram, FaXTwitter } from "react-icons/fa6";
-import { PROFILE } from "../data/content";
+import { useContent } from "../ContentContext";
 
-const DIRECT_CONTACT = [
-  { icon: Mail, label: "Email", href: `mailto:${PROFILE.email}`, brand: "email" },
-  { icon: FaLinkedin, label: "LinkedIn", href: PROFILE.linkedin, brand: "linkedin" },
-  { icon: FaGithub, label: "GitHub", href: PROFILE.github, brand: "github" },
-  { icon: FaInstagram, label: "Instagram", href: PROFILE.instagram, brand: "instagram" },
-  { icon: FaXTwitter, label: "X", href: PROFILE.x, brand: "x" },
-  { icon: Phone, label: "Phone", href: `tel:${PROFILE.phone}`, brand: "phone" },
-];
+// Rows only appear when you have filled the field in, so removing a link in the admin panel hides its row.
+const buildContacts = (PROFILE, LINKS) =>
+  [
+    PROFILE.email && { icon: Mail, label: "Email", href: `mailto:${PROFILE.email}`, brand: "email" },
+    PROFILE.linkedin && { icon: FaLinkedin, label: "LinkedIn", href: PROFILE.linkedin, brand: "linkedin" },
+    PROFILE.github && { icon: FaGithub, label: "GitHub", href: PROFILE.github, brand: "github" },
+    PROFILE.instagram && { icon: FaInstagram, label: "Instagram", href: PROFILE.instagram, brand: "instagram" },
+    PROFILE.x && { icon: FaXTwitter, label: "X", href: PROFILE.x, brand: "x" },
+    PROFILE.phone && { icon: Phone, label: "Phone", href: `tel:${PROFILE.phone}`, brand: "phone" },
+    ...(LINKS || []).filter((l) => l.url).map((l) => ({ icon: Link2, label: l.label || l.url, href: l.url, brand: "link" })),
+  ].filter(Boolean);
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.09 } } };
 // Rows swing in from below with a little overshoot, like they're dropping into place.
@@ -20,6 +23,8 @@ const item = {
 };
 
 export default function Contact() {
+  const { PROFILE, LINKS } = useContent();
+  const DIRECT_CONTACT = buildContacts(PROFILE, LINKS);
   return (
     <section id="contact" style={{ background: "var(--bg-alt)" }}>
       <div className="container">
@@ -47,7 +52,7 @@ export default function Contact() {
             <span className="contact-col-label">Direct contact</span>
             {DIRECT_CONTACT.map((c) => (
               <motion.a
-                key={c.label}
+                key={c.label + c.href}
                 href={c.href}
                 target={c.href.startsWith("http") ? "_blank" : undefined}
                 rel="noopener noreferrer"

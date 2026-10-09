@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { PROJECTS } from "../data/content";
+import { useContent } from "../ContentContext";
 import TiltCard from "./TiltCard";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.13 } } };
@@ -10,6 +10,7 @@ const item = {
 };
 
 export default function Projects() {
+  const { PROJECTS } = useContent();
   return (
     <section id="projects">
       <div className="container">
@@ -38,10 +39,16 @@ export default function Projects() {
                   </p>
                 )}
                 <div className="project-stack">
-                  {p.stack.map((s) => (
+                  {(p.stack || []).map((s) => (
                     <span key={s}>{s}</span>
                   ))}
                 </div>
+                {(p.link || p.github) && (
+                  <div className="project-links">
+                    {p.link && <a href={p.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Live ↗</a>}
+                    {p.github && <a href={p.github} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Code ↗</a>}
+                  </div>
+                )}
               </TiltCard>
             </motion.div>
           ))}

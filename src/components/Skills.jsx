@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
-import {
-  Code2, ServerCog, LayoutPanelLeft, Database, Cloud, Wrench, BrainCircuit, Sparkles,
-} from "lucide-react";
-import { SKILL_GROUPS } from "../data/content";
+import { useContent } from "../ContentContext";
+import { getIcon } from "../icons";
 import Coverflow from "./Coverflow";
 
-const ICONS = { Code2, ServerCog, LayoutPanelLeft, Database, Cloud, Wrench, BrainCircuit, Sparkles };
 
 export default function Skills() {
+  const { SKILL_GROUPS } = useContent();
   const [open, setOpen] = useState(null);
 
   // Tap anywhere that isn't a chip to let the open one settle back.
@@ -31,7 +29,7 @@ export default function Skills() {
 
       <Coverflow>
         {SKILL_GROUPS.map((g) => {
-          const Icon = ICONS[g.icon];
+          const Icon = getIcon(g.icon);
           return (
             <div className={`card skill-group-card${open && open.startsWith(g.title + "::") ? " has-open" : ""}`} key={g.title}>
               <div className="skill-group-head">

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Award } from "lucide-react";
-import { CERTIFICATIONS } from "../data/content";
+import { useContent } from "../ContentContext";
+import { getIcon } from "../icons";
 import TiltCard from "./TiltCard";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.1 } } };
@@ -12,6 +13,7 @@ const item = {
 };
 
 export default function Certifications() {
+  const { CERTIFICATIONS } = useContent();
   const [active, setActive] = useState(null);
 
   // Tap anywhere outside a card to settle it back down.
@@ -48,11 +50,16 @@ export default function Certifications() {
             >
               <TiltCard className="card cert-card">
                 <div className="edu-icon">
-                  <Award size={18} />
+                  {(() => { const Icon = getIcon(c.icon, Award); return <Icon size={18} />; })()}
                 </div>
                 <div>
                   <h5>{c.title}</h5>
                   <p>{c.org}</p>
+                  {c.link && (
+                    <a className="cert-link" href={c.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                      View credential ↗
+                    </a>
+                  )}
                 </div>
               </TiltCard>
             </motion.div>

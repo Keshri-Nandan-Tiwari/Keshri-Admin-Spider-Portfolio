@@ -1,7 +1,8 @@
-import { FACTS } from "../data/content";
+import { useContent } from "../ContentContext";
 import ImportanceLoop from "./ImportanceLoop";
 
 export default function LoopingFacts() {
+  const { FACTS } = useContent();
   return (
     <section id="about">
       <div className="container">

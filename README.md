@@ -63,3 +63,14 @@ portfolio/
 
 Same as before — build and drag the `dist/` folder to Netlify, or connect
 the repo and set build command `npm run build`, publish directory `dist`.
+
+## Admin panel
+
+Open **`/#/admin`** on your site (or press **Ctrl/Cmd + Shift + A**) to manage everything without touching code:
+profile & bio, photo, resume, contact details and extra links, About lines, skills, education (with optional score),
+certifications and projects. Add, edit, reorder and delete freely.
+
+- **Preview** shows your unpublished edits on the real site.
+- **Publish** saves `public/content.json` (and any new photo/resume) into this GitHub repo using a personal access token
+  with *Contents: Read and write*. Netlify/Vercel rebuilds and the site updates in about a minute.
+- Your passcode and token are kept only in your own browser.

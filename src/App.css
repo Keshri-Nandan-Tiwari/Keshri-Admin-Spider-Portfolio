@@ -937,3 +937,25 @@
   .container, .nav-inner { max-width: 1900px; }
   .hero-grid { grid-template-columns: 1fr 560px; gap: 88px; }
 }
+
+/* ===================== ADMIN-DRIVEN EXTRAS (only appear when you fill them in) ===================== */
+.edu-score {
+  display: inline-block; margin-left: 10px; padding: 2px 9px; border-radius: 99px;
+  font: 600 .72rem/1.6 "JetBrains Mono", ui-monospace, monospace; color: var(--highlight);
+  border: 1px solid color-mix(in srgb, var(--highlight) 40%, transparent);
+}
+.cert-link { display: inline-block; margin-top: 6px; font-size: .76rem; color: var(--highlight); text-decoration: none; }
+.cert-link:hover { text-decoration: underline; }
+.project-links { display: flex; gap: 10px; margin-top: 14px; }
+.project-links a {
+  font: 600 .78rem "JetBrains Mono", ui-monospace, monospace; color: var(--text); text-decoration: none;
+  padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2);
+  transition: border-color .25s ease, color .25s ease;
+}
+.project-links a:hover { border-color: var(--highlight); color: var(--highlight); }
+.brand-link .dc-icon { background: linear-gradient(135deg, var(--highlight), #6b4cff); }
+
+/* ===================== ADMIN entry inside the top-right quick menu ===================== */
+.quicknav-menu .quicknav-admin { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--text-dim); }
+.quicknav-menu .quicknav-admin svg { transition: transform .6s ease; }
+.quicknav-menu .quicknav-admin:hover svg { transform: rotate(120deg); }

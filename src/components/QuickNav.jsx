@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Compass, X, User, GraduationCap, Award, Wrench, FolderGit2, Mail } from "lucide-react";
+import { Compass, X, User, GraduationCap, Award, Wrench, FolderGit2, Mail, Settings } from "lucide-react";
 
 const LINKS = [
   { href: "#hero", label: "Home", icon: User },
@@ -35,6 +35,12 @@ export default function QuickNav() {
                 <l.icon size={15} /> {l.label}
               </a>
             ))}
+            {/* hidden only inside the admin panel's own prototype frame */}
+            {window.name !== "portfolio-preview" && (
+              <a className="quicknav-admin" href="#/admin" onClick={() => setOpen(false)}>
+                <Settings size={15} /> Admin
+              </a>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
