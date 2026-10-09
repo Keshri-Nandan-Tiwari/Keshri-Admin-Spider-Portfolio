@@ -20,7 +20,12 @@
     "photo": "/photo.jpg",
     "handle": "@keshri_08__"
   },
-  "links": [],
+  "links": [
+    {
+      "label": "Telegram ",
+      "url": "t.me/TiwariJiTheDestroyer"
+    }
+  ],
   "marquee": [
     "Full-Stack Developer",
     "Java · Spring Boot",
@@ -301,7 +306,7 @@
   ],
   "sections": [],
   "meta": {
-    "updatedAt": "2026-10-09T07:37:39.158Z"
+    "updatedAt": "2026-10-09T07:40:17.141Z"
   },
   "admin": {
     "serviceId": "keshrinandantiwari08@gmail.com",
