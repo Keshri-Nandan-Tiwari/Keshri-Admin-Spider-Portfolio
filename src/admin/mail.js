@@ -4,8 +4,19 @@ export const loadMailCfg = () => { try { return JSON.parse(localStorage.getItem(
 export const saveMailCfg = (c) => { try { localStorage.setItem(MAIL_KEY, JSON.stringify(c)); } catch (_) {} };
 export const mailReady = (c) => !!(c && c.serviceId && c.templateId && c.publicKey);
 
+const SENT_KEY = "portfolio-admin-mailsent";
+// at most 5 emails per hour from this device, so the form can never be used to spam you
+function rateOk() {
+  let a = []; try { a = JSON.parse(localStorage.getItem(SENT_KEY) || "[]"); } catch (_) {}
+  a = a.filter((t) => Date.now() - t < 3600000);
+  if (a.length >= 5) return false;
+  a.push(Date.now()); try { localStorage.setItem(SENT_KEY, JSON.stringify(a)); } catch (_) {}
+  return true;
+}
+
 export async function sendMail(cfg, { subject, message, code }) {
   if (!mailReady(cfg)) throw new Error("Email is not set up yet (Admin → Security).");
+  if (!rateOk()) throw new Error("Too many emails from this device. Try again in an hour.");
   const r = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { motion, useMotionValue, useSpring, animate } from "framer-motion";
 import { ArrowRight, MapPin, Download } from "lucide-react";
-import { useContent } from "../ContentContext";
+import { useContent, assetUrl } from "../ContentContext";
 import NeonSign from "./NeonSign";
 import Magnetic from "./Magnetic";
 import ShatterTitle from "./ShatterTitle";
@@ -127,7 +127,11 @@ export default function Hero() {
           >
             <div className="photo-ring-inner photo-flip-space">
               <div className="photo-face photo-face-front">
-                <img src={PROFILE.photo || "/photo.jpg"} alt={PROFILE.name} />
+                <img
+                  src={assetUrl(PROFILE.photo) || "/photo.jpg"}
+                  alt={PROFILE.name}
+                  onError={(e) => { if (!e.currentTarget.dataset.fb) { e.currentTarget.dataset.fb = "1"; e.currentTarget.src = PROFILE.photo || "/photo.jpg"; } }}
+                />
                 <div className="hero-photo-badge">{PROFILE.name}</div>
               </div>
               <div className="photo-face photo-face-back">

@@ -1,21 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import "./admin.css";
-import { DEFAULT_CONTENT, DRAFT_KEY, CONTENT_URL, normalize, loadDraft } from "../ContentContext";
+import { DEFAULT_CONTENT, DRAFT_KEY, CONTENT_URL, normalize, loadDraft, assetUrl as rawAsset } from "../ContentContext";
 import { ICON_NAMES } from "../icons";
-import { loadSettings, saveSettings, testConnection, publish } from "./github";
+import { loadSettings, saveSettings, clearSettings, clearToken, safeHook, testConnection, publish, checkLive, saveVaults, fetchRemoteAdmin } from "./github";
+import { lockedFor, recordFail, recordOk, fmtWait } from "./throttle";
+import { logEvent, readLog, clearLog } from "./auditlog";
+import { seal, open as openVault, newRecoveryKey, cleanKey, MIN_PASS, vaultSupported, passcodeProblem, generatePasscode } from "./vault";
 import { loadMailCfg, saveMailCfg, mailReady, sendMail, changedMail } from "./mail";
 
-const PASS_KEY = "portfolio-admin-pass";
 const SESSION_KEY = "portfolio-admin-unlocked";
-
-async function sha(text) {
-  try {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  } catch (_) {
-    let h = 5381; for (const c of text) h = ((h << 5) + h + c.charCodeAt(0)) | 0; return "x" + h;
-  }
-}
 
 const downloadJson = (obj, name) => {
   const a = document.createElement("a");
@@ -30,8 +23,8 @@ function Field({ label, hint, value, onChange, area, placeholder, type = "text" 
   return (
     <label className="adm-field">
       <span>{label}</span>
-      {area ? <textarea value={value || ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
-        : <input type={type} value={value || ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />}
+      {area ? <textarea value={value || ""} placeholder={placeholder} maxLength={30000} onChange={(e) => onChange(e.target.value)} />
+        : <input type={type} value={value || ""} placeholder={placeholder} maxLength={2000} autoComplete={type === "password" ? "off" : undefined} onChange={(e) => onChange(e.target.value)} />}
       {hint && <small>{hint}</small>}
     </label>
   );
@@ -42,7 +35,7 @@ function Select({ label, value, onChange, options }) {
     <label className="adm-field">
       <span>{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {options.map((o) => (Array.isArray(o) ? <option key={o[0]} value={o[0]}>{o[1]}</option> : <option key={o} value={o}>{o}</option>))}
       </select>
     </label>
   );
@@ -69,8 +62,9 @@ function Chips({ label, items, onChange, placeholder }) {
 }
 
 // A list of cards you can add to, reorder, edit and delete.
-function Collection({ items, onChange, blank, title, sub, addLabel, render }) {
-  const [open, setOpen] = useState(null);
+function Collection({ items, onChange, blank, title, sub, addLabel, render, open: openProp, setOpen: setOpenProp }) {
+  const [openLocal, setOpenLocal] = useState(null);
+  const open = openProp !== undefined ? openProp : openLocal, setOpen = setOpenProp || setOpenLocal;
   const set = (i, v) => onChange(items.map((x, j) => (j === i ? v : x)));
   return (
     <div>
@@ -115,88 +109,125 @@ function resizeImage(file, max = 900) {
 const readDataUrl = (file) => new Promise((res, rej) => { const fr = new FileReader(); fr.onerror = rej; fr.onload = () => res(fr.result); fr.readAsDataURL(file); });
 
 /* ---------- passcode gate ---------- */
-const RESET_KEY = "portfolio-admin-reset";
-const setPasscode = async (pass) => { localStorage.setItem(PASS_KEY, await sha(pass)); sessionStorage.setItem(SESSION_KEY, "1"); };
-
-// Email settings are public by design; keep a copy on this device and fall back to the published file on a new device.
-async function findMailCfg() {
-  const local = loadMailCfg();
-  if (mailReady(local)) return local;
-  try {
-    const r = await fetch(CONTENT_URL + "?v=" + Date.now(), { cache: "no-store" });
-    if (r.ok) { const j = await r.json(); if (mailReady(j.admin)) return j.admin; }
-  } catch (_) { /* offline or not published yet */ }
-  return null;
-}
+// One passcode, kept in your repo (locked), works on every device. Nobody can create a passcode of their own:
+// the very first setup needs your GitHub token, and after that the editor only opens with THE passcode.
+const ADMIN_SESSION = SESSION_KEY;
 
 function Gate({ onOk }) {
-  const saved = localStorage.getItem(PASS_KEY);
-  const [mode, setMode] = useState("login"); // login | forgot | code | token | newpass
-  const [a, setA] = useState(""), [b, setB] = useState(""), [code, setCode] = useState(""), [token, setToken] = useState("");
+  const [mode, setMode] = useState("loading"); // loading | setup | login | forgot | recovery | token | newpass
+  const [admin, setAdmin] = useState({}), [reach, setReach] = useState(true);
+  const [a, setA] = useState(""), [b, setB] = useState(""), [token, setToken] = useState(""), [rkey, setRkey] = useState("");
   const [err, setErr] = useState(""), [info, setInfo] = useState(""), [busy, setBusy] = useState(false);
-  const cfgRef = useRef(null);
+  const verified = useRef(""); // token proven valid this session
+  const [shown, setShown] = useState("");
 
-  const finish = async (how) => {
-    await setPasscode(a);
-    const cfg = cfgRef.current || (await findMailCfg());
-    if (cfg) { try { await sendMail(cfg, changedMail(how)); } catch (_) { /* notification is best-effort */ } }
-    onOk();
+  const load = async () => {
+    setMode("loading");
+    const r = await fetchRemoteAdmin(); setAdmin(r.admin); setReach(r.ok);
+    setMode(r.admin && r.admin.vault ? "login" : "setup");
   };
+  useEffect(() => {
+    // remove leftovers from older versions (an unsalted passcode hash and a saved token must never stay in the browser)
+    ["portfolio-admin-pass", "portfolio-admin-auth", "portfolio-admin-mail"].forEach((k) => { try { localStorage.removeItem(k); } catch (_) {} });
+    try { sessionStorage.removeItem("portfolio-admin-reset"); } catch (_) {}
+    loadSettings();
+    load();
+  }, []);
+
   const checkNew = () => {
-    if (a.length < 4) { setErr("Use at least 4 characters."); return false; }
+    const prob = passcodeProblem(a);
+    if (prob) { setErr(prob); return false; }
     if (a !== b) { setErr("The two passcodes don't match."); return false; }
     return true;
   };
+  const suggest = () => { const p = generatePasscode(); setA(p); setB(p); setShown(p); setErr(""); };
+  const guard = () => { const w = lockedFor(); if (w > 0) { setErr(`Too many wrong attempts. Try again in ${fmtWait(w)}.`); logEvent("locked", fmtWait(w)); return false; } return true; };
+  const wrong = (what) => { const w = recordFail(); logEvent("signin_fail", what); return w > 0 ? `${what} Locked for ${fmtWait(w)}.` : what; };
+  const enter = (tok) => { recordOk(); logEvent("signin_ok"); saveSettings({ token: tok }); sessionStorage.setItem(ADMIN_SESSION, "1"); onOk(); };
+  const notify = async (how) => { if (mailReady(admin)) { try { await sendMail(admin, changedMail(how)); } catch (_) { /* best effort */ } } };
 
-  const login = async (e) => {
-    e.preventDefault(); setErr("");
-    if (saved) {
-      if ((await sha(a)) === saved) { sessionStorage.setItem(SESSION_KEY, "1"); onOk(); } else setErr("Wrong passcode.");
-    } else if (checkNew()) { await setPasscode(a); onOk(); }
+  // creates / replaces the passcode vault using a token we have just proven valid
+  const lockWith = async (tok, how) => {
+    const s = { ...loadSettings(), token: tok };
+    await testConnection(s);
+    await saveVaults(s, { vault: await seal(tok, a) });
+    await notify(how);
+    enter(tok);
   };
 
-  const sendCode = async () => {
-    setErr(""); setInfo(""); setBusy(true);
+  const setup = async (e) => {
+    e.preventDefault(); setErr("");
+    if (!checkNew()) return;
+    if (/^ghp_/.test(token.trim()) && !window.confirm("This looks like a CLASSIC token, which can reach ALL of your repositories — and it will be stored (locked) in a public repo.\n\nA fine-grained token limited to just this repo is much safer.\n\nContinue anyway?")) return;
+    setBusy(true);
+    try { await lockWith(token.trim(), "set up for the first time"); } catch (e2) { setErr(e2.message); }
+    setBusy(false);
+  };
+  const login = async (e) => {
+    e.preventDefault(); setErr("");
+    if (!guard()) return;
+    setBusy(true);
+    const tok = await openVault(admin.vault, a);
+    if (!tok) setErr(wrong("Wrong passcode.")); else enter(tok);
+    setBusy(false);
+  };
+  const useRecovery = async (e) => {
+    e.preventDefault(); setErr("");
+    if (!checkNew()) return;
+    setBusy(true);
     try {
-      const cfg = await findMailCfg();
-      if (!cfg) throw new Error("Email isn't set up for this site yet. Use your GitHub token below instead, then set up email in Admin → Security.");
-      cfgRef.current = cfg;
-      const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1000000, c = String(n).padStart(6, "0");
-      sessionStorage.setItem(RESET_KEY, JSON.stringify({ h: await sha(c), exp: Date.now() + 10 * 60000, tries: 0 }));
-      await sendMail(cfg, { subject: "Your portfolio admin reset code", message: `Your reset code is ${c}. It works for 10 minutes. If you didn't ask for it, ignore this email.`, code: c });
-      setInfo("Code sent. Check your email (and spam)."); setMode("code");
+      if (!guard()) { setBusy(false); return; }
+      const tok = await openVault(admin.recovery, cleanKey(rkey));
+      if (!tok) throw new Error(wrong("That recovery key isn't right. Check the email you saved it in."));
+      await lockWith(tok, "reset with the emailed recovery key");
     } catch (e2) { setErr(e2.message); }
     setBusy(false);
   };
-  const verifyCode = async (e) => {
-    e.preventDefault(); setErr("");
-    let r; try { r = JSON.parse(sessionStorage.getItem(RESET_KEY) || "null"); } catch (_) { r = null; }
-    if (!r || Date.now() > r.exp) return setErr("That code expired. Ask for a new one.");
-    if (r.tries >= 5) return setErr("Too many tries. Ask for a new code.");
-    if ((await sha(code.trim())) !== r.h) { r.tries++; sessionStorage.setItem(RESET_KEY, JSON.stringify(r)); return setErr("Wrong code."); }
-    if (!checkNew()) return;
-    sessionStorage.removeItem(RESET_KEY); await finish("reset with an email code");
-  };
   const verifyToken = async (e) => {
-    e.preventDefault(); setErr(""); setBusy(true);
-    try { await testConnection({ ...loadSettings(), token: token.trim() }); setMode("newpass"); setInfo("Token verified. Choose a new passcode."); }
-    catch (e2) { setErr(e2.message); }
+    e.preventDefault(); setErr("");
+    if (!guard()) return;
+    setBusy(true);
+    try { await testConnection({ ...loadSettings(), token: token.trim() }); verified.current = token.trim(); setInfo("Token verified. Choose a new passcode."); setMode("newpass"); }
+    catch (e2) { setErr(/401|rejected/.test(e2.message) ? wrong(e2.message) : e2.message); }
     setBusy(false);
   };
-  const saveNew = async (e) => { e.preventDefault(); setErr(""); if (checkNew()) await finish("reset with the GitHub token"); };
+  const saveNew = async (e) => {
+    e.preventDefault(); setErr(""); if (!checkNew()) return;
+    setBusy(true);
+    try { await lockWith(verified.current, "reset with the GitHub token"); } catch (e2) { setErr(e2.message); }
+    setBusy(false);
+  };
+  const back = (m) => () => { setErr(""); setMode(m); };
+  const warn = !vaultSupported() && <p className="adm-err">This page isn't in a secure context. Open it on https:// or http://localhost.</p>;
 
   return (
     <div className="adm-root"><div className="adm-gate">
+      {mode === "loading" && <form onSubmit={(e) => e.preventDefault()}><h1>Portfolio <span style={{ color: "#ff3355" }}>Admin</span></h1><p className="adm-sub">Checking…</p></form>}
+      {mode === "setup" && (
+        <form onSubmit={setup}>
+          <h1>Set up <span style={{ color: "#ff3355" }}>admin</span></h1>
+          <p className="adm-sub">First time: create the admin passcode. It will work on every device, and only people you give it to can use it.
+            Your GitHub token (which can write to this site's repo) is needed once so only <b>you</b> can create it.</p>
+          {!reach && <p className="adm-err">Couldn't reach GitHub just now. Check your connection and try again.</p>}
+          {warn}
+          <Field label="GitHub token" type="password" value={token} onChange={setToken} hint="Best: a fine-grained token limited to this one repo, with Contents: Read and write." />
+          <Field label="New admin passcode" type="password" value={a} onChange={setA} hint={`At least ${MIN_PASS} characters. Because the locked key lives in a public repo, make it long and unguessable — or let us suggest one.`} />
+          <Field label="Repeat passcode" type="password" value={b} onChange={setB} />
+          <button type="button" className="adm-btn" style={{ width: "100%", marginBottom: 12 }} onClick={suggest}>Suggest a strong passcode</button>
+          {shown && <div className="adm-note">Your passcode: <b style={{ wordBreak: "break-all" }}>{shown}</b><br />Save it in a password manager now — it can't be shown again.</div>}
+          {err && <p className="adm-err">{err}</p>}
+          <button className="adm-btn pri" style={{ width: "100%" }} disabled={busy}>{busy ? "Setting up…" : "Create admin passcode"}</button>
+        </form>
+      )}
       {mode === "login" && (
         <form onSubmit={login}>
           <h1>Portfolio <span style={{ color: "#ff3355" }}>Admin</span></h1>
-          <p className="adm-sub">{saved ? "Enter your passcode to continue." : "First time here: create a passcode for this device."}</p>
+          <p className="adm-sub">Enter the admin passcode to continue.</p>
+          {warn}
           <Field label="Passcode" type="password" value={a} onChange={setA} />
-          {!saved && <Field label="Repeat passcode" type="password" value={b} onChange={setB} />}
           {err && <p className="adm-err">{err}</p>}
-          <button className="adm-btn pri" style={{ width: "100%" }}>{saved ? "Unlock" : "Create passcode"}</button>
-          {saved && <button type="button" className="adm-link" onClick={() => { setErr(""); setMode("forgot"); }}>Forgot passcode?</button>}
-          <p className="adm-sub" style={{ marginTop: 14 }}>This keeps casual visitors out of the editor. Nobody can change your live site without your GitHub token.</p>
+          <button className="adm-btn pri" style={{ width: "100%" }} disabled={busy}>{busy ? "Unlocking…" : "Unlock"}</button>
+          <button type="button" className="adm-link" onClick={back("forgot")}>Forgot passcode?</button>
         </form>
       )}
       {mode === "forgot" && (
@@ -204,41 +235,46 @@ function Gate({ onOk }) {
           <h1>Reset passcode</h1>
           <p className="adm-sub">Pick a way to prove it's you.</p>
           {err && <p className="adm-err">{err}</p>}
-          <button className="adm-btn pri" style={{ width: "100%", marginBottom: 10 }} disabled={busy} onClick={sendCode}>{busy ? "Sending…" : "Email me a reset code"}</button>
-          <button className="adm-btn" style={{ width: "100%" }} onClick={() => { setErr(""); setMode("token"); }}>Verify with my GitHub token</button>
-          <button type="button" className="adm-link" onClick={() => { setErr(""); setMode("login"); }}>← Back</button>
+          <button className="adm-btn pri" style={{ width: "100%", marginBottom: 10 }} disabled={!admin.recovery} onClick={back("recovery")}>Use my emailed recovery key</button>
+          {!admin.recovery && <p className="adm-sub" style={{ marginTop: -4 }}>No recovery key was set up. (Admin → Security → “Email me a recovery key”.)</p>}
+          <button className="adm-btn" style={{ width: "100%" }} onClick={back("token")}>Verify with my GitHub token</button>
+          <button type="button" className="adm-link" onClick={back("login")}>← Back</button>
         </form>
       )}
-      {mode === "code" && (
-        <form onSubmit={verifyCode}>
-          <h1>Enter the code</h1>
-          <p className="adm-sub">{info}</p>
-          <Field label="6-digit code" value={code} onChange={setCode} placeholder="123456" />
+      {mode === "recovery" && (
+        <form onSubmit={useRecovery}>
+          <h1>Recovery key</h1>
+          <p className="adm-sub">Open the email titled “Your portfolio admin recovery key”, paste the key, then choose a new passcode.</p>
+          <Field label="Recovery key" value={rkey} onChange={setRkey} placeholder="ABCDE-FGHJK-LMNPQ-RSTUV" />
           <Field label="New passcode" type="password" value={a} onChange={setA} />
           <Field label="Repeat new passcode" type="password" value={b} onChange={setB} />
+          <button type="button" className="adm-btn" style={{ width: "100%", marginBottom: 12 }} onClick={suggest}>Suggest a strong passcode</button>
+          {shown && <div className="adm-note">Your passcode: <b style={{ wordBreak: "break-all" }}>{shown}</b><br />Save it in a password manager now.</div>}
           {err && <p className="adm-err">{err}</p>}
-          <button className="adm-btn pri" style={{ width: "100%" }}>Set new passcode</button>
-          <button type="button" className="adm-link" onClick={() => { setErr(""); setMode("forgot"); }}>← Back</button>
+          <button className="adm-btn pri" style={{ width: "100%" }} disabled={busy}>{busy ? "Checking…" : "Set new passcode"}</button>
+          <button type="button" className="adm-link" onClick={back("forgot")}>← Back</button>
         </form>
       )}
       {mode === "token" && (
         <form onSubmit={verifyToken}>
           <h1>Verify with GitHub</h1>
-          <p className="adm-sub">Paste the GitHub token you use to publish. It is only checked with GitHub and is not saved here.</p>
+          <p className="adm-sub">Paste the GitHub token you use to publish. It is only checked with GitHub.</p>
           <Field label="GitHub token" type="password" value={token} onChange={setToken} />
           {err && <p className="adm-err">{err}</p>}
           <button className="adm-btn pri" style={{ width: "100%" }} disabled={busy}>{busy ? "Checking…" : "Verify"}</button>
-          <button type="button" className="adm-link" onClick={() => { setErr(""); setMode("forgot"); }}>← Back</button>
+          <button type="button" className="adm-link" onClick={back("forgot")}>← Back</button>
         </form>
       )}
       {mode === "newpass" && (
         <form onSubmit={saveNew}>
           <h1>New passcode</h1>
           <p className="adm-sub">{info}</p>
-          <Field label="New passcode" type="password" value={a} onChange={setA} />
-          <Field label="Repeat new passcode" type="password" value={b} onChange={setB} />
+          <Field label="Passcode" type="password" value={a} onChange={setA} hint={`At least ${MIN_PASS} characters.`} />
+          <Field label="Repeat passcode" type="password" value={b} onChange={setB} />
+          <button type="button" className="adm-btn" style={{ width: "100%", marginBottom: 12 }} onClick={suggest}>Suggest a strong passcode</button>
+          {shown && <div className="adm-note">Your passcode: <b style={{ wordBreak: "break-all" }}>{shown}</b><br />Save it in a password manager now.</div>}
           {err && <p className="adm-err">{err}</p>}
-          <button className="adm-btn pri" style={{ width: "100%" }}>Save passcode</button>
+          <button className="adm-btn pri" style={{ width: "100%" }} disabled={busy}>{busy ? "Saving…" : "Save passcode"}</button>
         </form>
       )}
     </div></div>
@@ -423,36 +459,161 @@ function ProjectsTab({ c, set }) {
   );
 }
 
+const LAYOUTS = [
+  ["text", "Writing (paragraphs, bullets, links)"], ["cards", "Cards (icon + title + text)"], ["tags", "Tags / chips"], ["timeline", "Timeline"],
+  ["stats", "Numbers / stats"], ["links", "Link buttons"], ["gallery", "Photo gallery"],
+];
+const newSection = (name) => ({ id: Math.random().toString(36).slice(2, 8), title: name, eyebrow: "", heading: name, type: "text", icon: "Sparkles", showInMenu: true, items: [], tags: [], text: "" });
+
+function ItemEditor({ type, it, u, icon }) {
+  const imgRef = useRef();
+  if (type === "timeline") return (<>
+    <div className="adm-grid"><Field label="Title" value={it.title} onChange={(v) => u({ ...it, title: v })} /><Field label="When" value={it.period} onChange={(v) => u({ ...it, period: v })} placeholder="2024 – Present" /></div>
+    <Field label="Description" area value={it.text} onChange={(v) => u({ ...it, text: v })} />
+  </>);
+  if (type === "stats") return (<div className="adm-grid"><Field label="Number / value" value={it.value} onChange={(v) => u({ ...it, value: v })} placeholder="40%" /><Field label="Label" value={it.label} onChange={(v) => u({ ...it, label: v })} placeholder="faster delivery" /></div>);
+  if (type === "links") return (<div className="adm-grid"><Field label="Title" value={it.title} onChange={(v) => u({ ...it, title: v })} /><Field label="URL" value={it.url} onChange={(v) => u({ ...it, url: v })} placeholder="https://" /></div>);
+  if (type === "gallery") return (<>
+    <div className="adm-photo">
+      {it.image ? <img src={assetPreview(it.image)} alt="" style={{ width: 130, height: 90 }} /> : <div className="adm-noimg">No photo yet</div>}
+      <div>
+        <input ref={imgRef} type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files[0]; if (f) u({ ...it, image: await resizeImage(f, 1200) }); }} />
+        <button className="adm-btn" onClick={() => imgRef.current.click()}>{it.image ? "Change photo" : "Choose photo"}</button>
+      </div>
+    </div>
+    <Field label="Caption (optional)" value={it.caption} onChange={(v) => u({ ...it, caption: v })} />
+  </>);
+  return (<>
+    <div className="adm-grid"><Field label="Title" value={it.title} onChange={(v) => u({ ...it, title: v })} /><Select label="Icon" value={it.icon || icon || "Star"} onChange={(v) => u({ ...it, icon: v })} options={ICON_NAMES} /></div>
+    <Field label="Description (optional)" area value={it.text} onChange={(v) => u({ ...it, text: v })} />
+    <Field label="Link (optional)" value={it.link} onChange={(v) => u({ ...it, link: v })} placeholder="https://" />
+  </>);
+}
+const assetPreview = (p) => (String(p).startsWith("/uploads/") ? rawAsset(p) : p);
+const blankItem = (type, icon) => ({ cards: { title: "New item", text: "", icon: icon || "Star", link: "" }, timeline: { title: "New entry", period: "", text: "" }, stats: { value: "", label: "" }, links: { title: "New link", url: "" }, gallery: { image: "", caption: "" } }[type] || { title: "New item" });
+const itemTitle = (type, it) => (type === "stats" ? `${it.value || ""} ${it.label || ""}`.trim() : type === "gallery" ? it.caption || (it.image ? "Photo" : "(no photo)") : it.title);
+
+const BUILTIN_SECTIONS = [["about", "About"], ["education", "Education"], ["certifications", "Certifications"], ["skills", "Skills"], ["projects", "Projects"]];
+
+function SectionsTab({ c, set }) {
+  const [name, setName] = useState(""), [open, setOpen] = useState(null);
+  const L = c.layout, toggle = (key, id) => set({ ...c, layout: { ...L, [key]: L[key].includes(id) ? L[key].filter((x) => x !== id) : [...L[key], id] } });
+  const add = () => { const n = name.trim(); if (!n) return; set({ ...c, sections: [...c.sections, newSection(n)] }); setOpen(c.sections.length); setName(""); };
+  return (
+    <>
+      <h2>Your own sections</h2>
+      <p className="adm-sub">
+        Type any name you like — Volunteering, My Story, Open Source, Travel, anything — and press <b>Add</b>. Then write whatever you want inside it.
+        It shows on your site before Contact and appears in the top-right menu automatically; delete it and it disappears from both.
+      </p>
+      <div className="adm-chipadd" style={{ marginBottom: 14 }}>
+        <input className="adm-in" value={name} placeholder="Type a section name…" onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+        <button className="adm-btn pri" onClick={add}>+ Add section</button>
+      </div>
+      <Collection open={open} setOpen={setOpen} items={c.sections} onChange={(v) => set({ ...c, sections: v })} blank={() => newSection("New section")}
+        title={(x) => x.title || x.heading} sub={(x) => (x.showInMenu === false ? "not in menu" : "in menu")} addLabel="Add an untitled section"
+        render={(x, u) => (<>
+          <div className="adm-grid">
+            <Field label="Menu name" value={x.title} onChange={(v) => u({ ...x, title: v })} hint="Shown in the top-right menu" />
+            <Field label="Heading on the page" value={x.heading} onChange={(v) => u({ ...x, heading: v })} />
+            <Field label="Small label above the heading (optional)" value={x.eyebrow} onChange={(v) => u({ ...x, eyebrow: v })} />
+            <Select label="Show in the top-right menu" value={x.showInMenu === false ? "No" : "Yes"} onChange={(v) => u({ ...x, showInMenu: v === "Yes" })} options={["Yes", "No"]} />
+            <Select label="Menu icon" value={x.icon || "Sparkles"} onChange={(v) => u({ ...x, icon: v })} options={ICON_NAMES} />
+            <Select label="How it looks" value={x.type || "text"} onChange={(v) => u({ ...x, type: v })} options={LAYOUTS} />
+          </div>
+          {(x.type || "text") === "text" && (
+            <Field label="Write here" area value={x.text} onChange={(v) => u({ ...x, text: v })}
+              hint="Blank line = new paragraph · “- ” starts a bullet · “# ” makes a subheading · **bold** · [link text](https://…)" />
+          )}
+          {x.type === "tags" && <Chips label="Tags" items={x.tags} onChange={(v) => u({ ...x, tags: v })} placeholder="Type and press Enter" />}
+          {x.type && x.type !== "text" && x.type !== "tags" && (
+            <Collection items={x.items || []} onChange={(v) => u({ ...x, items: v })} blank={() => blankItem(x.type, x.icon)}
+              title={(it) => itemTitle(x.type, it)} addLabel="Add an item"
+              render={(it, iu) => <ItemEditor type={x.type} it={it} u={iu} icon={x.icon} />} />
+          )}
+        </>)} />
+      <hr className="adm-sep" />
+      <h2>Page sections &amp; menu</h2>
+      <p className="adm-sub">Hide any built-in section, or keep it out of the top-right menu. Numbers close up automatically.</p>
+      {BUILTIN_SECTIONS.map(([id, label]) => (
+        <div className="adm-card" key={id}>
+          <div className="adm-card-head" style={{ cursor: "default" }}>
+            <b>{label}</b>
+            <label className="adm-check" style={{ margin: 0 }}><input type="checkbox" checked={!L.hide.includes(id)} onChange={() => toggle("hide", id)} /> On the page</label>
+            <label className="adm-check" style={{ margin: 0 }}><input type="checkbox" checked={!L.noMenu.includes(id) && !L.hide.includes(id)} disabled={L.hide.includes(id)} onChange={() => toggle("noMenu", id)} /> In the menu</label>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function PublishTab({ c, set, live, onPublished }) {
-  const [s, setS] = useState(loadSettings), [log, setLog] = useState([]), [busy, setBusy] = useState(false);
+  const [s, setS] = useState(loadSettings), [log, setLog] = useState([]), [busy, setBusy] = useState(false), [st, setSt] = useState(null);
   const fileRef = useRef();
   const say = (t, k) => setLog((l) => [...l, { t, k }]);
-  const upd = (k) => (v) => { const n = { ...s, [k]: v }; setS(n); saveSettings(n); };
-  const run = async (fn) => { setBusy(true); try { await fn(); } catch (e) { say(e.message, "bad"); } setBusy(false); };
+  const upd = (k) => (v) => { const n = { ...s, [k]: v }; setS(n); saveSettings(n); setS(loadSettings()); };
+  const [hookText, setHookText] = useState(s.deployHook);
+  // only a real Netlify / Vercel hook is ever stored; anything else is shown with a warning and not saved
+  const onHook = (v) => { setHookText(v); if (v.trim() === "" || safeHook(v)) { saveSettings({ deployHook: safeHook(v) }); setS(loadSettings()); } };
+  const run = async (fn) => { setBusy(true); try { await fn(); } catch (e) { logEvent("publish_fail", e.message); say(e.message, "bad"); } setBusy(false); };
+  const onLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname) || window.location.protocol === "file:";
+
+  // After publishing: confirm GitHub has it, then watch the deployed site catch up.
+  const watch = async (stamp) => {
+    setSt({ gh: "…", site: onLocal ? "n/a" : "waiting" });
+    for (let i = 0; i < 24; i++) {
+      const r = await checkLive(s);
+      const gh = r.repo === stamp ? "ok" : "…";
+      const site = onLocal ? "n/a" : r.site === stamp ? "ok" : "waiting";
+      setSt({ gh, site });
+      if (gh === "ok" && site !== "waiting") return;
+      await new Promise((res) => setTimeout(res, 8000));
+    }
+    setSt((x) => ({ ...x, site: "slow" }));
+  };
 
   return (
     <>
       <h2>Publish to your live site</h2>
       <div className="adm-note">
-        Publishing saves your content into your GitHub repo. Netlify / Vercel rebuilds automatically and your site updates in about a minute.
-        You need a GitHub token with <b>Contents: Read and write</b> access to the repo. It is stored only in this browser.
+        Publishing saves your content into your GitHub repo. Visitors see it within about 30 seconds because the site reads it straight from GitHub,
+        and Netlify / Vercel also redeploys from the new commit (that's what updates your photo and resume files).
       </div>
-      <div className="adm-grid">
-        <Field label="GitHub username" value={s.owner} onChange={upd("owner")} />
-        <Field label="Repository" value={s.repo} onChange={upd("repo")} />
-        <Field label="Branch" value={s.branch} onChange={upd("branch")} />
-        <Field label="Content file" value={s.path} onChange={upd("path")} hint="Leave as is unless you moved it" />
-      </div>
-      <Field label="GitHub token" type="password" value={s.token} onChange={upd("token")} hint="Create one at github.com → Settings → Developer settings → Personal access tokens" />
+      <div className="adm-target">Publishing to <b>{s.owner}/{s.repo}</b> · branch <b>{s.branch}</b></div>
+      <Field label="Netlify / Vercel deploy hook (optional)" value={hookText} onChange={onHook}
+        hint="Netlify: Site configuration → Build & deploy → Build hooks → Add. Must be an https://api.netlify.com/… (or api.vercel.com) URL. Treat it like a password." />
+      {hookText.trim() !== "" && !safeHook(hookText) && <p className="adm-err">That isn't a valid Netlify/Vercel deploy hook URL, so it won't be used or saved.</p>}
+      <label className="adm-check"><input type="checkbox" checked={s.advanced} onChange={(e) => upd("advanced")(e.target.checked)} /> Advanced: publish to a different repo</label>
+      {s.advanced && (
+        <div className="adm-grid">
+          <Field label="GitHub username" value={s.owner} onChange={upd("owner")} />
+          <Field label="Repository" value={s.repo} onChange={upd("repo")} />
+          <Field label="Branch" value={s.branch} onChange={upd("branch")} />
+          <Field label="Content file" value={s.path} onChange={upd("path")} />
+        </div>
+      )}
+      <Field label="GitHub token (signed in)" type="password" value={s.token} onChange={upd("token")} />
       <div className="adm-row">
         <button className="adm-btn" disabled={busy} onClick={() => run(async () => say(await testConnection(s), "good"))}>Test connection</button>
         <button className="adm-btn pri" disabled={busy} onClick={() => run(async () => {
-          setLog([]);
+          setLog([]); setSt(null);
           const out = await publish(c, s, (t) => say(t));
-          set(out); onPublished(out);
-          say("Published! Your site will update in about a minute.", "good");
+          set(out); onPublished(out); logEvent("publish_ok");
+          say("Saved to GitHub. Your site updates in about 30 seconds.", "good");
+          watch(out.meta.updatedAt);
         })}>{busy ? "Working…" : "Publish now"}</button>
+        <button className="adm-btn" disabled={busy} onClick={() => run(async () => { const r = await checkLive(s); say(`GitHub has: ${r.repo || "nothing published yet"}` + (onLocal ? "" : ` · deployed site has: ${r.site || "nothing yet"}`)); })}>Check live status</button>
       </div>
+      {st && (
+        <div className="adm-status">
+          <div>GitHub repo: <b className={st.gh === "ok" ? "good" : ""}>{st.gh === "ok" ? "updated ✓" : "checking…"}</b></div>
+          <div>Netlify / live site: <b className={st.site === "ok" ? "good" : ""}>{
+            st.site === "ok" ? "deployed ✓" : st.site === "n/a" ? "open the admin on your live site to see this" : st.site === "slow" ? "still deploying — check Netlify → Deploys" : "deploying…"
+          }</b></div>
+        </div>
+      )}
       <div className="adm-log">{log.length ? log.map((l, i) => <div key={i} className={l.k}>{l.t}</div>) : "Status messages appear here."}</div>
       <hr className="adm-sep" />
       <h2>Backup &amp; reset</h2>
@@ -469,16 +630,17 @@ function PublishTab({ c, set, live, onPublished }) {
       <hr className="adm-sep" />
       <h2>Reset the whole live website</h2>
       <p className="adm-sub">
-        Puts your <b>live</b> portfolio back to the original default: the original bio, skills, education, certifications, projects, links, photo and resume.
-        A backup of what is live right now downloads first, and your email settings are kept. The site updates in about a minute.
+        Puts your <b>live</b> portfolio back to the original default: the original bio, skills, education, certifications, projects, links, photo and resume (extra sections are removed).
+        A backup of what is live right now downloads first, and your email settings are kept.
       </p>
       <button className="adm-btn danger" disabled={busy} onClick={() => run(async () => {
         if (!window.confirm("Reset the WHOLE live website to the default portfolio?\n\nA backup of the current live content will download first.")) return;
-        setLog([]);
+        setLog([]); setSt(null);
         try { downloadJson(live, "portfolio-live-backup.json"); say("Backup of the current live content downloaded."); } catch (_) { /* best effort */ }
         const out = await publish({ ...DEFAULT_CONTENT, admin: c.admin }, s, (t) => say(t));
-        set(out); onPublished(out);
-        say("Done. Your live website is being reset to the default portfolio. It updates in about a minute.", "good");
+        set(out); onPublished(out); logEvent("live_site_reset");
+        say("Done. Your live website is being reset to the default portfolio.", "good");
+        watch(out.meta.updatedAt);
       })}>Reset live website to default</button>
     </>
   );
@@ -486,38 +648,72 @@ function PublishTab({ c, set, live, onPublished }) {
 
 function SecurityTab({ c, set }) {
   const m = c.admin, up = (k) => (v) => set({ ...c, admin: { ...m, [k]: v } });
-  const [cur, setCur] = useState(""), [n1, setN1] = useState(""), [n2, setN2] = useState(""), [msg, setMsg] = useState(null), [busy, setBusy] = useState(false);
+  const [cur, setCur] = useState(""), [n1, setN1] = useState(""), [n2, setN2] = useState("");
+  const [tkPass, setTkPass] = useState(""), [tkNew, setTkNew] = useState("");
+  const [msg, setMsg] = useState(null), [busy, setBusy] = useState(false);
   const say = (t, k) => setMsg({ t, k });
-  const change = async () => {
-    setMsg(null);
-    if ((await sha(cur)) !== localStorage.getItem(PASS_KEY)) return say("Your current passcode is wrong.", "bad");
-    if (n1.length < 4) return say("Use at least 4 characters.", "bad");
-    if (n1 !== n2) return say("The new passcodes don't match.", "bad");
-    await setPasscode(n1); setCur(""); setN1(""); setN2("");
-    if (mailReady(m)) {
-      try { await sendMail(m, changedMail("changed from the admin panel")); say("Passcode changed. A notice was emailed to you.", "good"); }
-      catch (e) { say("Passcode changed, but the email failed: " + e.message, "bad"); }
-    } else say("Passcode changed. (Set up email below to be notified next time.)", "good");
-  };
+  const run = async (fn) => { setBusy(true); setMsg(null); try { await fn(); } catch (e) { say(e.message, "bad"); } setBusy(false); };
+  const mail = async (subject, message, code) => { if (mailReady(m)) { try { await sendMail(m, { subject, message, code }); return true; } catch (_) { return false; } } return false; };
+
+  const changePass = () => run(async () => {
+    const s = loadSettings(), { admin } = await fetchRemoteAdmin();
+    const tok = admin.vault ? await openVault(admin.vault, cur) : null;
+    if (!tok) throw new Error("Your current passcode is wrong.");
+    const prob = passcodeProblem(n1); if (prob) throw new Error(prob);
+    if (n1 !== n2) throw new Error("The new passcodes don't match.");
+    await saveVaults({ ...s, token: tok }, { vault: await seal(tok, n1) });
+    logEvent("passcode_changed");
+    setCur(""); setN1(""); setN2("");
+    const sent = await mail(changedMail("changed").subject, changedMail("changed from the admin panel").message);
+    say("Passcode changed on every device." + (sent ? " A notice was emailed to you." : mailReady(m) ? " (The notice email failed.)" : ""), "good");
+  });
+
+  const sendRecovery = () => run(async () => {
+    if (!mailReady(m)) throw new Error("Fill in and save the email settings below first.");
+    const s = loadSettings();
+    if (!s.token) throw new Error("Sign in again first.");
+    const key = newRecoveryKey();
+    await saveVaults(s, { recovery: await seal(s.token, key) });
+    logEvent("recovery_key_sent");
+    await sendMail(m, { subject: "Your portfolio admin recovery key", code: key, message: `Your recovery key is ${key}. Keep this email safe. If you ever forget the admin passcode, choose “Forgot passcode → Use my emailed recovery key” and paste it.` });
+    say("Recovery key emailed. Keep that email — it's your way back in if you forget the passcode.", "good");
+  });
+
+  const replaceToken = () => run(async () => {
+    const { admin } = await fetchRemoteAdmin();
+    const old = admin.vault ? await openVault(admin.vault, tkPass) : null;
+    if (!old) throw new Error("The admin passcode is wrong.");
+    const nt = tkNew.trim();
+    const s = { ...loadSettings(), token: nt };
+    await testConnection(s);
+    // the old token is needed only if the new one cannot write yet; the new one is what we store from now on
+    await saveVaults(s, { vault: await seal(nt, tkPass), recovery: null });
+    saveSettings({ token: nt }); setTkPass(""); setTkNew(""); logEvent("token_replaced");
+    say("GitHub token replaced for every device." + (admin.recovery ? " The old recovery key no longer works — send a new one below." : "") + " Remember to delete the old token on GitHub.", "good");
+  });
+
   return (
     <>
       <h2>Security</h2>
+      <div className="adm-note">
+        <b>How access works:</b> one admin passcode opens this editor on <b>any device</b>. Nobody can create a passcode of their own, and nothing goes live without the publishing key the passcode unlocks.
+        Give the passcode only to people you trust.
+      </div>
       <h3 style={{ fontSize: ".95rem", margin: "6px 0 10px" }}>Change passcode</h3>
       <div className="adm-grid">
         <Field label="Current passcode" type="password" value={cur} onChange={setCur} />
         <span />
-        <Field label="New passcode" type="password" value={n1} onChange={setN1} />
+        <Field label="New passcode" type="password" value={n1} onChange={setN1} hint={`At least ${MIN_PASS} characters`} />
         <Field label="Repeat new passcode" type="password" value={n2} onChange={setN2} />
       </div>
-      <button className="adm-btn pri" onClick={change}>Change passcode</button>
-      {msg && <div className={`adm-log ${msg.k}`} style={{ minHeight: 0 }}><div className={msg.k}>{msg.t}</div></div>}
+      <button className="adm-btn pri" disabled={busy} onClick={changePass}>Change passcode</button>
+      {msg && <div className="adm-log" style={{ minHeight: 0 }}><div className={msg.k}>{msg.t}</div></div>}
       <hr className="adm-sep" />
-      <h3 style={{ fontSize: ".95rem", margin: "6px 0 6px" }}>Email for passcode reset &amp; alerts</h3>
+      <h3 style={{ fontSize: ".95rem", margin: "6px 0 6px" }}>Email: alerts &amp; recovery key</h3>
       <div className="adm-note">
-        With email set up you get a message whenever the passcode changes, and “Forgot passcode?” can email you a reset code.
-        It uses <b>EmailJS</b> (free): create a service for your Gmail, then a template whose <b>To</b> address is your email and whose body uses
-        <code> {"{{subject}}"} </code>and<code> {"{{message}}"}</code>. Paste the three IDs below, <b>Save</b>, then <b>Publish</b> so it also works on other devices.
-        These three values are public by design, and the message always goes to the address inside your template.
+        Uses <b>EmailJS</b> (free): connect your Gmail, then create a template whose <b>To</b> address is your email and whose body has
+        <code> {"{{subject}}"} </code>and<code> {"{{message}}"}</code>. Paste the three IDs, press <b>Save &amp; test</b>, then <b>Publish</b>.
+        You'll get an email whenever the passcode changes, and <b>Email me a recovery key</b> sends you a key that gets you back in if you forget the passcode.
       </div>
       <div className="adm-grid">
         <Field label="EmailJS Service ID" value={m.serviceId} onChange={up("serviceId")} placeholder="service_xxxxxxx" />
@@ -525,16 +721,34 @@ function SecurityTab({ c, set }) {
       </div>
       <Field label="EmailJS Public Key" value={m.publicKey} onChange={up("publicKey")} />
       <div className="adm-row">
-        <button className="adm-btn" disabled={busy} onClick={async () => {
-          setBusy(true); setMsg(null);
-          try { saveMailCfg(m); await sendMail(m, { subject: "Portfolio admin test email", message: "If you can read this, passcode emails are working." }); say("Test email sent. Check your inbox (and spam).", "good"); }
-          catch (e) { say(e.message, "bad"); }
-          setBusy(false);
-        }}>Send test email</button>
+        <button className="adm-btn" disabled={busy} onClick={() => run(async () => {
+          saveMailCfg(m); await sendMail(m, { subject: "Portfolio admin test email", message: "If you can read this, admin emails are working." });
+          say("Test email sent. Check your inbox (and spam). Press Publish so the settings work on other devices.", "good");
+        })}>Save &amp; send test email</button>
+        <button className="adm-btn pri" disabled={busy} onClick={sendRecovery}>Email me a recovery key</button>
       </div>
-      <p className="adm-sub" style={{ marginTop: 14 }}>
-        Forgot the passcode and email isn't set up? On the sign-in screen choose <b>Forgot passcode? → Verify with my GitHub token</b>.
-      </p>
+      <hr className="adm-sep" />
+      <h3 style={{ fontSize: ".95rem", margin: "6px 0 6px" }}>Replace GitHub token</h3>
+      <p className="adm-sub">Tokens can expire, and replacing one cuts off anyone who has used your passcode before. Create a new fine-grained token on GitHub (this repo, Contents: Read and write), paste it here, then delete the old one.</p>
+      <div className="adm-grid">
+        <Field label="Admin passcode" type="password" value={tkPass} onChange={setTkPass} />
+        <Field label="New GitHub token" type="password" value={tkNew} onChange={setTkNew} />
+      </div>
+      <button className="adm-btn" disabled={busy} onClick={replaceToken}>Replace token</button>
+      <hr className="adm-sep" />
+      <h3 style={{ fontSize: ".95rem", margin: "6px 0 6px" }}>Activity on this device</h3>
+      <p className="adm-sub">A private log of sign-ins, wrong attempts and publishes on this device. The full history of every change to your live site is on GitHub:
+        {" "}<a href={`https://github.com/${loadSettings().owner}/${loadSettings().repo}/commits/${loadSettings().branch}`} target="_blank" rel="noopener noreferrer" style={{ color: "#ff3355" }}>view commit history ↗</a>.
+        Turn on GitHub's email alerts, Dependabot and secret scanning for the repo (Settings → Code security).</p>
+      <div className="adm-log" style={{ maxHeight: 220, overflow: "auto" }}>
+        {readLog().length ? readLog().map((e, i) => <div key={i} className={/fail|locked/.test(e.type) ? "bad" : ""}>{new Date(e.t).toLocaleString()} · {e.type}{e.detail ? " · " + e.detail : ""}</div>) : "Nothing yet."}
+      </div>
+      <button className="adm-btn" style={{ marginTop: 8 }} onClick={() => { clearLog(); setMsg(null); }}>Clear log</button>
+      <hr className="adm-sep" />
+      <button className="adm-btn danger" onClick={() => {
+        if (!window.confirm("Sign out and remove this session's key? You'll need the passcode to come back.")) return;
+        sessionStorage.removeItem(SESSION_KEY); clearSettings(); window.location.reload();
+      }}>Sign out now</button>
     </>
   );
 }
@@ -551,13 +765,15 @@ function resetSection(tab, c) {
     case "education": return { ...c, education: d.education };
     case "certs": return { ...c, certifications: d.certifications };
     case "projects": return { ...c, projects: d.projects };
+    case "sections": return { ...c, sections: [], layout: { hide: [], noMenu: [] } };
     default: return c;
   }
 }
 
-const TABS = [["profile", "Profile"], ["links", "Links"], ["about", "About"], ["skills", "Skills"], ["education", "Education"], ["certs", "Certifications"], ["projects", "Projects"], ["security", "Security"], ["publish", "Publish"]];
+const TABS = [["profile", "Profile"], ["links", "Links"], ["about", "About"], ["skills", "Skills"], ["education", "Education"], ["certs", "Certifications"], ["projects", "Projects"], ["sections", "Sections"], ["security", "Security"], ["publish", "Publish"]];
 
-const SECTION_OF = { profile: "hero", links: "contact", about: "about", skills: "skills", education: "education", certs: "certifications", projects: "projects" };
+const SECTION_OF = { profile: "hero", links: "contact", about: "about", skills: "skills", education: "education", certs: "certifications", projects: "projects", sections: "sections" };
+const targetId = (tab, c) => (tab === "sections" ? (c.sections[0] ? `sec-${c.sections[0].id}` : "projects") : SECTION_OF[tab]);
 const DEVICES = [["Desktop", 1280], ["Tablet", 820], ["Phone", 390]];
 
 // The prototype: your real site, in a frame, updating live as you type.
@@ -572,8 +788,14 @@ function Prototype({ c, tab }) {
     window.addEventListener("message", f); return () => window.removeEventListener("message", f);
   }, [send]);
   useEffect(() => {
-    const id = SECTION_OF[tab], w = frame.current && frame.current.contentWindow;
+    const last = c.sections[c.sections.length - 1], w = frame.current && frame.current.contentWindow;
+    if (tab === "sections" && last && w) w.postMessage({ type: "portfolio-scroll", id: `sec-${last.id}` }, "*");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c.sections.length]);
+  useEffect(() => {
+    const id = targetId(tab, c), w = frame.current && frame.current.contentWindow;
     if (id && w) w.postMessage({ type: "portfolio-scroll", id }, "*");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
   useEffect(() => {
     if (!stage.current) return;
@@ -656,6 +878,7 @@ function Panel({ onLock }) {
             {tab === "education" && <EducationTab {...props} />}
             {tab === "certs" && <CertsTab {...props} />}
             {tab === "projects" && <ProjectsTab {...props} />}
+            {tab === "sections" && <SectionsTab {...props} />}
             {tab === "security" && <SecurityTab {...props} />}
             {tab === "publish" && <PublishTab {...props} live={live} onPublished={setLive} />}
             {SECTION_OF[tab] && (
@@ -674,8 +897,22 @@ function Panel({ onLock }) {
   );
 }
 
+const IDLE_MS = 30 * 60 * 1000; // sign out after 30 minutes without activity
+
 export default function Admin() {
-  const [ok, setOk] = useState(() => sessionStorage.getItem(SESSION_KEY) === "1" && !!localStorage.getItem(PASS_KEY));
-  if (!ok) return <Gate onOk={() => setOk(true)} />;
-  return <Panel onLock={() => { sessionStorage.removeItem(SESSION_KEY); setOk(false); }} />;
+  const [ok, setOk] = useState(() => sessionStorage.getItem(SESSION_KEY) === "1" && !!loadSettings().token);
+  const last = useRef(Date.now());
+  const lock = () => { sessionStorage.removeItem(SESSION_KEY); clearToken(); setOk(false); };
+
+  useEffect(() => {
+    if (!ok) return;
+    const bump = () => { last.current = Date.now(); };
+    const evs = ["pointerdown", "keydown", "scroll"];
+    evs.forEach((e) => window.addEventListener(e, bump, { passive: true }));
+    const t = setInterval(() => { if (Date.now() - last.current > IDLE_MS) { logEvent("auto_lock"); lock(); } }, 30000);
+    return () => { evs.forEach((e) => window.removeEventListener(e, bump)); clearInterval(t); };
+  }, [ok]);
+
+  if (!ok) return <Gate onOk={() => { last.current = Date.now(); setOk(true); }} />;
+  return <Panel onLock={lock} />;
 }

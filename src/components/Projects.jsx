@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useContent } from "../ContentContext";
+import { useContent, useSectionNumber } from "../ContentContext";
 import TiltCard from "./TiltCard";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.13 } } };
@@ -10,12 +10,13 @@ const item = {
 };
 
 export default function Projects() {
+  const secNum = useSectionNumber("projects");
   const { PROJECTS } = useContent();
   return (
     <section id="projects">
       <div className="container">
         <div className="section-head">
-          <span className="section-num">05</span>
+          <span className="section-num">{secNum}</span>
           <span className="eyebrow">Selected work</span>
           <h2>Things I've shipped.</h2>
         </div>

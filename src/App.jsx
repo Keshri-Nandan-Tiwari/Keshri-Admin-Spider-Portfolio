@@ -16,10 +16,11 @@ import Education from "./components/Education";
 import Certifications from "./components/Certifications";
 import Skills from "./components/Skills";
 import Projects from "./components/Projects";
+import CustomSections from "./components/CustomSections";
 import Contact from "./components/Contact";
 import Footer from "./components/Footer";
 import SpiderWalker from "./SpiderWalker";
-import { ContentProvider } from "./ContentContext";
+import { ContentProvider, useContent } from "./ContentContext";
 
 const Admin = lazy(() => import("./admin/Admin"));
 
@@ -34,6 +35,8 @@ const readRoute = () => {
 
 function Site({ preview }) {
   const [loading, setLoading] = useState(!preview);
+  const { LAYOUT } = useContent();
+  const on = (id) => !LAYOUT.hide.includes(id);
 
   // Ctrl/Cmd + Shift + A opens the admin panel
   useEffect(() => {
@@ -66,11 +69,12 @@ function Site({ preview }) {
       <QuickNav />
       <Hero />
       <Marquee />
-      <LoopingFacts />
-      <Education />
-      <Certifications />
-      <Skills />
-      <Projects />
+      {on("about") && <LoopingFacts />}
+      {on("education") && <Education />}
+      {on("certifications") && <Certifications />}
+      {on("skills") && <Skills />}
+      {on("projects") && <Projects />}
+      <CustomSections />
       <Contact />
       <Footer />
       {!loading && !(preview && inPrototype()) && <SpiderWalker defaults={{ web: true, lights: 0 }} />}
@@ -90,6 +94,13 @@ export default function App() {
     window.addEventListener("hashchange", f);
     return () => window.removeEventListener("hashchange", f);
   }, []);
+  // the editor and the draft preview should never show up in search engines
+  useEffect(() => {
+    let m = document.querySelector('meta[name="robots"]');
+    if (route === "site") { if (m) m.remove(); return; }
+    if (!m) { m = document.createElement("meta"); m.name = "robots"; document.head.appendChild(m); }
+    m.content = "noindex, nofollow";
+  }, [route]);
 
   if (route === "admin") {
     return (

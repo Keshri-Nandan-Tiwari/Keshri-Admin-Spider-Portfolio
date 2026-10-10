@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Award } from "lucide-react";
-import { useContent } from "../ContentContext";
+import { useContent, useSectionNumber } from "../ContentContext";
 import { getIcon } from "../icons";
 import TiltCard from "./TiltCard";
 
@@ -13,6 +13,7 @@ const item = {
 };
 
 export default function Certifications() {
+  const secNum = useSectionNumber("certifications");
   const { CERTIFICATIONS } = useContent();
   const [active, setActive] = useState(null);
 
@@ -29,7 +30,7 @@ export default function Certifications() {
     <section id="certifications">
       <div className="container">
         <div className="section-head">
-          <span className="section-num">03</span>
+          <span className="section-num">{secNum}</span>
           <span className="eyebrow">Certifications</span>
           <h2>Proof of the work.</h2>
         </div>

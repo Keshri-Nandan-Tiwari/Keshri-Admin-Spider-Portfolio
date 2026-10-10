@@ -292,6 +292,7 @@
   border: 1px solid var(--border); border-radius: 14px; padding: 10px;
   display: flex; flex-direction: column; gap: 4px; min-width: 170px;
   box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  max-height: calc(100vh - 90px); overflow-y: auto; overscroll-behavior: contain;
 }
 .quicknav-menu a {
   padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; font-weight: 600;
@@ -959,3 +960,49 @@
 .quicknav-menu .quicknav-admin { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--text-dim); }
 .quicknav-menu .quicknav-admin svg { transition: transform .6s ease; }
 .quicknav-menu .quicknav-admin:hover svg { transform: rotate(120deg); }
+
+/* ===================== EXTRA SECTIONS you add in the admin panel ===================== */
+.custom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 20px; }
+.custom-card { padding: 20px; display: flex; gap: 14px; align-items: flex-start; }
+.custom-card .edu-icon { width: 38px; height: 38px; flex: none; }
+.custom-card h5 { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+.custom-card p { font-size: 0.82rem; color: var(--text-dim); line-height: 1.55; }
+.custom-tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.custom-chip {
+  padding: 9px 16px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border);
+  font: 500 0.88rem "JetBrains Mono", ui-monospace, monospace; transition: border-color .25s ease, transform .25s ease;
+}
+.custom-chip:hover { border-color: var(--highlight); transform: translateY(-2px); }
+.custom-text { max-width: 780px; margin-top: 20px; font-size: 1.05rem; line-height: 1.85; color: var(--text-dim); }
+.custom-text p { margin: 0 0 1.1em; }
+.custom-text h3 { margin: 1.4em 0 .5em; font-size: 1.15rem; color: var(--text); }
+.custom-text ul { margin: 0 0 1.1em; padding-left: 1.2em; }
+.custom-text li { margin-bottom: .4em; }
+.custom-text li::marker { color: var(--highlight); }
+.custom-text strong { color: var(--text); }
+.custom-text a { color: var(--highlight); }
+
+.custom-timeline { position: relative; margin-top: 24px; padding-left: 26px; display: grid; gap: 14px; max-width: 820px; }
+.custom-timeline::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: linear-gradient(var(--highlight), transparent); }
+.custom-tl-item { position: relative; }
+.custom-tl-dot { position: absolute; left: -26px; top: 22px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg); border: 2px solid var(--highlight); box-shadow: 0 0 14px color-mix(in srgb, var(--highlight) 60%, transparent); }
+.custom-tl-card { padding: 18px 20px; }
+.custom-tl-when { font: 600 .72rem "JetBrains Mono", ui-monospace, monospace; color: var(--highlight); letter-spacing: .06em; margin-bottom: 4px; }
+.custom-tl-card h5 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+.custom-tl-card p { font-size: .86rem; color: var(--text-dim); line-height: 1.6; }
+.custom-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-top: 22px; }
+.custom-stat { padding: 24px 18px; text-align: center; }
+.custom-stat-value { font-family: "Archivo Black", sans-serif; font-size: clamp(1.8rem, 4vw, 2.6rem); color: var(--highlight); line-height: 1.1; }
+.custom-stat-label { margin-top: 8px; font-size: .82rem; color: var(--text-dim); }
+.custom-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+.custom-link {
+  display: inline-flex; gap: 8px; align-items: center; padding: 12px 20px; border-radius: 12px; text-decoration: none;
+  color: var(--text); background: var(--surface); border: 1px solid var(--border); font-weight: 600;
+  transition: border-color .25s ease, transform .25s ease, color .25s ease;
+}
+.custom-link:hover { border-color: var(--highlight); color: var(--highlight); transform: translateY(-2px); }
+.custom-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; margin-top: 22px; }
+.custom-shot { margin: 0; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+.custom-shot img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; transition: transform .6s ease; }
+.custom-shot:hover img { transform: scale(1.06); }
+.custom-shot figcaption { padding: 10px 14px; font-size: .8rem; color: var(--text-dim); }

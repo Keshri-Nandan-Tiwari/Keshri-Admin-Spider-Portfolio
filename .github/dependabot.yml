@@ -1,0 +1,8 @@
+# GitHub opens a pull request whenever one of your packages has a newer (or security-fixed) version.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

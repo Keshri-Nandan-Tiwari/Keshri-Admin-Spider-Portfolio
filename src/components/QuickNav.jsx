@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Compass, X, User, GraduationCap, Award, Wrench, FolderGit2, Mail, Settings } from "lucide-react";
+import { useContent } from "../ContentContext";
+import { getIcon } from "../icons";
 
-const LINKS = [
+const BASE_LINKS = [
   { href: "#hero", label: "Home", icon: User },
   { href: "#about", label: "About", icon: User },
   { href: "#education", label: "Education", icon: GraduationCap },
@@ -14,6 +16,11 @@ const LINKS = [
 
 export default function QuickNav() {
   const [open, setOpen] = useState(false);
+  const { SECTIONS, LAYOUT } = useContent();
+  // The menu follows the page: hidden sections disappear, and every section you add shows up here automatically.
+  const base = BASE_LINKS.filter((l) => { const id = l.href.slice(1); return !LAYOUT.hide.includes(id) && !LAYOUT.noMenu.includes(id); });
+  const extra = SECTIONS.filter((s) => s.showInMenu !== false && !LAYOUT.noMenu.includes(`sec-${s.id}`)).map((s) => ({ href: `#sec-${s.id}`, label: s.title || s.heading || "Section", icon: getIcon(s.icon) }));
+  const LINKS = [...base.slice(0, -1), ...extra, base[base.length - 1]];
 
   return (
     <div className="quicknav">

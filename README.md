@@ -66,11 +66,24 @@ the repo and set build command `npm run build`, publish directory `dist`.
 
 ## Admin panel
 
-Open **`/#/admin`** on your site (or press **Ctrl/Cmd + Shift + A**) to manage everything without touching code:
-profile & bio, photo, resume, contact details and extra links, About lines, skills, education (with optional score),
-certifications and projects. Add, edit, reorder and delete freely.
+Open **`/#/admin`** on your site (or use **Admin** at the end of the top-right menu, or press **Ctrl/Cmd + Shift + A**).
 
-- **Preview** shows your unpublished edits on the real site.
-- **Publish** saves `public/content.json` (and any new photo/resume) into this GitHub repo using a personal access token
-  with *Contents: Read and write*. Netlify/Vercel rebuilds and the site updates in about a minute.
-- Your passcode and token are kept only in your own browser.
+**Access:** one admin passcode, which works on every device. The first time, you create it with your GitHub token
+(a fine-grained token limited to this repo, Contents: Read and write is best). The token is stored in this repo locked
+with the passcode (AES-256, PBKDF2), so only people you give the passcode to can open the editor and publish.
+Nobody can create a passcode of their own. Use a long passcode (10+ characters).
+
+**Forgot it?** Use the recovery key you emailed yourself (Security → Email me a recovery key), or verify with your GitHub token.
+To lock someone out completely, use Security → Replace GitHub token (and delete the old token on GitHub).
+
+**What you can manage:** profile, bio, photo, resume, contact details and extra links, About lines, skills, education
+(with optional score), certifications, projects, and **any extra sections you like** (cards, tags, text, timeline, numbers,
+link buttons, photo galleries) that can also appear in the top-right menu.
+
+**Publishing:** saves `public/content.json` (and any new photos/resume) to the repo configured in `src/siteConfig.js`.
+The live site reads that file straight from GitHub (updates in about 30 seconds) and Netlify/Vercel redeploys from the commit.
+Optionally paste a Netlify build hook in the Publish tab to force a rebuild every time.
+
+## Security
+See `SECURITY.md` (how it is protected, what to do if something goes wrong) and `SECURITY_AUDIT.md` (the full audit).
+Run `sh scripts/security-check.sh` regularly to scan your files and git history for leaked secrets.

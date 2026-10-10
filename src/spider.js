@@ -1233,7 +1233,21 @@ function injectStyle() {
  * options.textSelector  CSS selector for the text the spider's Text FX may touch
  * options.persist       save settings in localStorage (default true)
  */
-export function mountSpider(options) {
+export // Saved choices come from the visitor's own browser storage: keep only known settings of the right type and size.
+function sanitizeSaved(saved) {
+  const out = {};
+  if (!saved || typeof saved !== "object") return out;
+  Object.keys(DEFAULT_SETTINGS).forEach((k) => {
+    if (!(k in saved)) return;
+    const d = DEFAULT_SETTINGS[k], v = saved[k];
+    if (typeof d === "number" && typeof v === "number" && isFinite(v)) out[k] = Math.max(-1000, Math.min(1000, v));
+    else if (typeof d === "boolean" && typeof v === "boolean") out[k] = v;
+    else if (typeof d === "string" && typeof v === "string" && /^[A-Za-z0-9_-]{1,24}$/.test(v)) out[k] = v;
+  });
+  return out;
+}
+
+function mountSpider(options) {
   options = options || {};
   const noop = () => {};
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -1247,7 +1261,7 @@ export function mountSpider(options) {
   const KEY = options.storageKey || "spider-walker";
   const persist = options.persist !== false;
   let S = Object.assign({}, BASE);
-  if (persist) { try { S = Object.assign(S, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) { /* ignore */ } }
+  if (persist) { try { S = Object.assign(S, sanitizeSaved(JSON.parse(localStorage.getItem(KEY) || "{}"))); } catch (e) { /* ignore */ } }
 
   const canvas = document.createElement("canvas");
   canvas.className = "spd-canvas";
@@ -1263,7 +1277,7 @@ export function mountSpider(options) {
     set(Object.assign({}, BASE, pr.values, { enabled: true }));
   }
   const engine = createSpiderEngine(canvas, S, { textSelector: options.textSelector, onTap: () => nextLook() });
-  canvas.__engine = engine;
+  if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.DEV) canvas.__engine = engine; // test hook, development only
   const fx = createSpiderFx(() => engine.body());
   fx.update(S);
 

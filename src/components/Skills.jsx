@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { useContent } from "../ContentContext";
+import { useContent, useSectionNumber } from "../ContentContext";
 import { getIcon } from "../icons";
 import Coverflow from "./Coverflow";
 
 
 export default function Skills() {
+  const secNum = useSectionNumber("skills");
   const { SKILL_GROUPS } = useContent();
   const [open, setOpen] = useState(null);
 
@@ -21,7 +22,7 @@ export default function Skills() {
     <section id="skills">
       <div className="container">
         <div className="section-head">
-          <span className="section-num">04</span>
+          <span className="section-num">{secNum}</span>
           <span className="eyebrow">Toolbox</span>
           <h2>What I build with.</h2>
         </div>

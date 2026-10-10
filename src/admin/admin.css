@@ -75,3 +75,9 @@
 @media (max-width: 979px) {
   .adm-proto { width: 100%; max-width: none; border-left: 0; }
 }
+
+.adm-target { background: #12151d; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: .84rem; color: #c3c8d6; margin-bottom: 14px; }
+.adm-check { display: flex; gap: 8px; align-items: center; font-size: .85rem; color: var(--dim); margin: 0 0 14px; cursor: pointer; }
+.adm-status { background: #0f1218; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: .85rem; line-height: 1.7; }
+.adm-status .good { color: #6be39a; }
+.adm-noimg { width: 130px; height: 90px; border: 1px dashed var(--line); border-radius: 12px; display: grid; place-items: center; color: var(--dim); font-size: .75rem; }

@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Mail, Phone, ArrowRight, Link2 } from "lucide-react";
 import { FaLinkedin, FaGithub, FaInstagram, FaXTwitter } from "react-icons/fa6";
 import { useContent } from "../ContentContext";
+import { clean, safeEmail } from "../safe";
 
 // Rows only appear when you have filled the field in, so removing a link in the admin panel hides its row.
 const buildContacts = (PROFILE, LINKS) =>
@@ -77,26 +78,30 @@ export default function Contact() {
             onSubmit={(e) => {
               e.preventDefault();
               const f = e.target;
-              window.location.href = `mailto:${PROFILE.email}?subject=${encodeURIComponent(
-                f.subject.value || "Portfolio contact"
+              // the message opens in the visitor's own email app; keep it plain text, single-line where it must be
+              const one = (v, n) => clean(v, n).replace(/[\r\n]+/g, " ").trim();
+              const to = safeEmail(PROFILE.email);
+              if (!to) return;
+              window.location.href = `mailto:${to}?subject=${encodeURIComponent(
+                one(f.subject.value, 150) || "Portfolio contact"
               )}&body=${encodeURIComponent(
-                `${f.message.value}\n\n— ${f.name.value} (${f.email.value})`
+                `${clean(f.message.value, 3000)}\n\n— ${one(f.name.value, 100)} (${one(f.email.value, 150)})`
               )}`;
             }}
           >
             <span className="contact-col-label">Send a message</span>
 
             <label htmlFor="c-name">Your name</label>
-            <input id="c-name" name="name" placeholder="John Doe" required />
+            <input id="c-name" name="name" placeholder="John Doe" maxLength={100} autoComplete="name" required />
 
             <label htmlFor="c-email">Your email</label>
-            <input id="c-email" name="email" type="email" placeholder="john@example.com" required />
+            <input id="c-email" name="email" type="email" placeholder="john@example.com" maxLength={150} autoComplete="email" required />
 
             <label htmlFor="c-subject">Subject</label>
-            <input id="c-subject" name="subject" placeholder="Let's collaborate!" />
+            <input id="c-subject" name="subject" placeholder="Let's collaborate!" maxLength={150} />
 
             <label htmlFor="c-message">Message</label>
-            <textarea id="c-message" name="message" placeholder="Tell me about your project..." required />
+            <textarea id="c-message" name="message" placeholder="Tell me about your project..." maxLength={3000} required />
 
             <button type="submit" className="btn-send">
               <ArrowRight size={16} /> Send Message

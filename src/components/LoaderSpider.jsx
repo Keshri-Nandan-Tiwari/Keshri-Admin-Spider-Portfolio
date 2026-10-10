@@ -20,7 +20,7 @@ export default function LoaderSpider({ stage }) {
     const W = window.innerWidth;
     const engine = createSpiderEngine(canvasRef.current, LOOK, { driven: true });
     s.engine = engine;
-    canvasRef.current.__engine = engine;
+    if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.DEV) canvasRef.current.__engine = engine; // test hook, development only
     engine.snapTo(W - 70, -90); // just above the top edge, in the right-hand corner
 
     // the silk thread follows the spider down from the top edge, then fades

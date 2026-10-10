@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { SITE, rawUrl } from "./siteConfig";
+import { sanitizeContent } from "./safe";
 import { PROFILE, FACTS, SKILL_GROUPS, EDUCATION, CERTIFICATIONS, PROJECTS, IDENTITY_LOOP } from "./data/content";
 
 // Everything the admin panel can edit lives in one object. Defaults come from data/content.js,
@@ -13,6 +15,9 @@ export const DEFAULT_CONTENT = {
   education: EDUCATION,
   certifications: CERTIFICATIONS,
   projects: PROJECTS,
+  layout: { hide: [], noMenu: [] }, // built-in sections you hide, and sections you keep out of the top-right menu
+  sections: [], // extra sections you add in the admin panel (interests, hobbies, ...)
+  meta: { updatedAt: "" },
   admin: { serviceId: "", templateId: "", publicKey: "" }, // email settings for passcode reset (public by design)
 };
 
@@ -21,12 +26,15 @@ export const DRAFT_KEY = "portfolio-admin-draft";
 export function normalize(raw) {
   const d = DEFAULT_CONTENT, r = raw && typeof raw === "object" ? raw : {};
   const arr = (k) => (Array.isArray(r[k]) ? r[k] : d[k]);
-  return {
+  return sanitizeContent({
     profile: { ...d.profile, ...(r.profile || {}) },
     links: arr("links"), marquee: arr("marquee"), facts: arr("facts"), identity: arr("identity"),
     skills: arr("skills"), education: arr("education"), certifications: arr("certifications"), projects: arr("projects"),
-    admin: { ...d.admin, ...(r.admin || {}) },
-  };
+    layout: { hide: [], noMenu: [], ...(r.layout || {}) },
+    sections: arr("sections"),
+    meta: { ...d.meta, ...(r.meta || {}) },
+    admin: (({ vault, recovery, ...rest }) => ({ ...d.admin, ...rest }))(r.admin || {}),
+  });
 }
 
 export function loadDraft() {
@@ -36,6 +44,10 @@ export function loadDraft() {
 const BASE = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.BASE_URL) || "/";
 export const CONTENT_URL = BASE + "content.json";
 
+// Files you upload in the admin panel (photo) are in your GitHub repo right away,
+// before Netlify has finished its next deploy, so load them from GitHub first.
+export const assetUrl = (p) => (typeof p === "string" && p.startsWith("/uploads/") ? rawUrl("public" + p) : p);
+
 const Ctx = createContext(null);
 
 export function ContentProvider({ preview, children }) {
@@ -43,11 +55,16 @@ export function ContentProvider({ preview, children }) {
 
   useEffect(() => {
     if (preview) { setContent(loadDraft() || DEFAULT_CONTENT); return; }
-    let dead = false;
-    fetch(CONTENT_URL + "?v=" + Date.now(), { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (!dead && j) setContent(normalize(j)); })
-      .catch(() => {});
+    let dead = false, best = null;
+    // Two sources, newest wins: the deployed file, and the repo itself (fresh within ~30 seconds of publishing).
+    const take = (j) => {
+      if (!j || dead) return;
+      const n = normalize(j);
+      if (!best || (n.meta.updatedAt || "") >= (best.meta.updatedAt || "")) { best = n; setContent(n); }
+    };
+    const get = (u) => fetch(u, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    get(CONTENT_URL + "?v=" + Date.now()).then(take);
+    get(rawUrl(SITE.contentPath) + "?t=" + Math.floor(Date.now() / 30000)).then(take);
     return () => { dead = true; };
   }, [preview]);
 
@@ -70,6 +87,15 @@ export function useContent() {
   const c = v ? v.content : DEFAULT_CONTENT;
   return {
     PROFILE: c.profile, LINKS: c.links, MARQUEE: c.marquee, FACTS: c.facts, IDENTITY_LOOP: c.identity,
-    SKILL_GROUPS: c.skills, EDUCATION: c.education, CERTIFICATIONS: c.certifications, PROJECTS: c.projects,
+    SKILL_GROUPS: c.skills, EDUCATION: c.education, CERTIFICATIONS: c.certifications, PROJECTS: c.projects, SECTIONS: c.sections, LAYOUT: c.layout,
   };
+}
+
+// Built-in sections, in page order. Their numbers (01, 02, …) close up automatically when you hide one,
+// and your own sections continue the count.
+export const BUILTIN = ["about", "education", "certifications", "skills", "projects"];
+export function useSectionNumber(id) {
+  const { LAYOUT, SECTIONS } = useContent();
+  const order = [...BUILTIN.filter((b) => !LAYOUT.hide.includes(b)), ...SECTIONS.map((x) => `sec-${x.id}`)];
+  return String(Math.max(0, order.indexOf(id)) + 1).padStart(2, "0");
 }

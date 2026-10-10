@@ -1,0 +1,28 @@
+# OPTIONAL: automatic security checks on every push.
+# To turn it on, copy this file to  .github/workflows/security.yml  using the GitHub website
+# (a command-line push of a workflow file needs a token with the "workflow" permission).
+name: security
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm audit --audit-level=high
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: sh scripts/security-check.sh --history-only

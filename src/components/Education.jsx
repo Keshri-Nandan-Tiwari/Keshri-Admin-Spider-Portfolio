@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { School } from "lucide-react";
-import { useContent } from "../ContentContext";
+import { useContent, useSectionNumber } from "../ContentContext";
 import { getIcon } from "../icons";
 import TiltCard from "./TiltCard";
 
@@ -13,6 +13,7 @@ const item = {
 };
 
 export default function Education() {
+  const secNum = useSectionNumber("education");
   const { EDUCATION } = useContent();
   const [hot, setHot] = useState(null);
 
@@ -29,7 +30,7 @@ export default function Education() {
     <section id="education" style={{ background: "var(--bg-alt)" }}>
       <div className="container">
         <div className="section-head">
-          <span className="section-num">02</span>
+          <span className="section-num">{secNum}</span>
           <span className="eyebrow">Education</span>
           <h2>Where it started.</h2>
         </div>
