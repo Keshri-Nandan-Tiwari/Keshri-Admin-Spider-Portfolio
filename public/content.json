@@ -304,14 +304,18 @@
       ]
     }
   ],
+  "layout": {
+    "hide": [],
+    "noMenu": []
+  },
   "sections": [],
   "meta": {
-    "updatedAt": "2026-10-09T07:51:34.698Z"
+    "updatedAt": "2026-10-10T03:02:23.534Z"
   },
   "admin": {
-    "serviceId": "keshrinandantiwari08@gmail.com",
-    "templateId": "keshrinandantiwari08@gmail.com",
-    "publicKey": "keshrinandantiwari08@gmail.com",
+    "serviceId": "service_3lm5ivq",
+    "templateId": "template_c6dltdl",
+    "publicKey": "6uuJPVgIVytx81PS0",
     "vault": {
       "v": 1,
       "i": 600000,
